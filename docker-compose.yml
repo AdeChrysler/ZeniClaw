@@ -1,0 +1,31 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - WAHA_URL=http://waha:3000
+    depends_on:
+      - waha
+    networks:
+      - zeniclaw
+
+  waha:
+    image: devlikeapro/waha:latest
+    restart: unless-stopped
+    environment:
+      - WHATSAPP_DEFAULT_ENGINE=WEBJS
+      - WAHA_DASHBOARD_ENABLED=false
+    volumes:
+      - waha_sessions:/app/.sessions
+    networks:
+      - zeniclaw
+
+volumes:
+  waha_sessions:
+
+networks:
+  zeniclaw:
+    driver: bridge
