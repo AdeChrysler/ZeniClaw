@@ -31,11 +31,10 @@ export async function GET() {
     checks.db = { status: "error", error: String(e) };
   }
 
-  // Telegram
-  const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
-  checks.telegram = { 
-    status: telegramToken ? "configured" : "missing_token",
-    tokenSet: !!telegramToken
+  // Telegram - per-user bot tokens (no global token needed)
+  checks.telegram = {
+    status: "per_user",
+    note: "Users provide their own bot token via dashboard"
   };
 
   return NextResponse.json({ 
