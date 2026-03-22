@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface DashboardData {
   user: { name: string; email: string; plan: string; trialEndsAt: string | null };
@@ -16,11 +17,13 @@ export default function DashboardPage() {
   const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [botTokenInput, setBotTokenInput] = useState("");
   const [savingToken, setSavingToken] = useState(false);
   const [tokenError, setTokenError] = useState<string | null>(null);
+  const waStatusRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -36,18 +39,30 @@ export default function DashboardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
+  // Dedicated QR polling — runs every 3s while status is "connecting"
+  useEffect(() => {
+    if (waStatusRef.current !== "connecting") return;
+    const interval = setInterval(() => {
+      setQrUrl(`/api/whatsapp?action=qr&t=${Date.now()}`);
+      setQrLoading(true);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [waStatusRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function fetchDashboard() {
     try {
       const res = await fetch("/api/dashboard");
       if (!res.ok) return;
       const d = await res.json();
       setData(d);
+      waStatusRef.current = d.whatsapp?.status ?? null;
 
-      // If WhatsApp is connecting, fetch QR
-      if (d.whatsapp?.status === "connecting" || d.whatsapp?.status === "disconnected") {
+      if (d.whatsapp?.status === "connecting") {
         setQrUrl(`/api/whatsapp?action=qr&t=${Date.now()}`);
+        setQrLoading(true);
       } else if (d.whatsapp?.status === "connected") {
         setQrUrl(null);
+        setQrLoading(false);
       }
     } catch (err) {
       console.error(err);
@@ -119,7 +134,10 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-zinc-950 text-white">
       {/* Top Bar */}
       <nav className="border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
-        <div className="text-xl font-bold text-emerald-400">ZeniClaw</div>
+        <div className="flex items-center gap-6">
+          <div className="text-xl font-bold text-emerald-400">ZeniClaw</div>
+          <Link href="/chat" className="text-sm text-zinc-400 hover:text-emerald-400 transition-colors">Web Chat</Link>
+        </div>
         <div className="flex items-center gap-4">
           <span className="text-zinc-400 text-sm">{session.user?.name || session.user?.email}</span>
           {data?.user?.plan === "free_trial" && (
@@ -165,16 +183,26 @@ export default function DashboardPage() {
             ) : wa?.status === "connecting" ? (
               <div className="space-y-4">
                 <p className="text-zinc-400 text-sm">Scan QR code dengan WhatsApp kamu:</p>
-                {qrUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={qrUrl}
-                    alt="QR Code"
-                    className="w-48 h-48 bg-white p-2 rounded-xl"
-                    onError={() => setQrUrl(null)}
-                  />
-                )}
-                <p className="text-zinc-500 text-xs">QR akan diperbarui otomatis</p>
+                <div className="w-48 h-48 bg-white p-2 rounded-xl flex items-center justify-center">
+                  {qrUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={qrUrl}
+                      src={qrUrl}
+                      alt="QR Code"
+                      className="w-full h-full object-contain"
+                      onLoad={() => setQrLoading(false)}
+                      onError={() => {
+                        setQrLoading(false);
+                        // Don't clear URL — keep retrying on next poll
+                      }}
+                    />
+                  ) : (
+                    <div className="text-zinc-400 text-xs text-center">Memuat QR...</div>
+                  )}
+                </div>
+                {qrLoading && <p className="text-zinc-500 text-xs">Memuat QR code...</p>}
+                {!qrLoading && qrUrl && <p className="text-zinc-500 text-xs">QR akan diperbarui otomatis setiap 3 detik</p>}
               </div>
             ) : (
               <div className="space-y-4">
