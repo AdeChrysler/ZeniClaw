@@ -51,7 +51,11 @@ export async function GET(request: NextRequest) {
   try {
     if (action === "qr") {
       // Return QR image as raw bytes — use raw fetch to preserve binary
-      let res = await wahaRequestRaw(`/api/${sessionName}/auth/qr.png`);
+      // Try /auth/qr first (confirmed working on WAHA), then .png variant, then screenshot
+      let res = await wahaRequestRaw(`/api/${sessionName}/auth/qr`);
+      if (!res.ok) {
+        res = await wahaRequestRaw(`/api/${sessionName}/auth/qr.png`);
+      }
       if (!res.ok) {
         // Fallback to screenshot endpoint
         res = await wahaRequestRaw(`/api/screenshot?session=${sessionName}`);
