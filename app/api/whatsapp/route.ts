@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/db";
 
-const WAHA_URL = process.env.WAHA_URL || "http://waha.sixzenith.com:3003";
+const WAHA_URL = process.env.WAHA_URL || "http://waha-rvvv2rgmxcc0ls629wsz3b24:3000";
 const WAHA_API_KEY = process.env.WAHA_API_KEY || "666";
 const APP_URL = process.env.APP_URL || "https://zeniclaw.zenova.id";
 
@@ -28,7 +28,12 @@ export async function GET(request: NextRequest) {
 
   try {
     if (action === "qr") {
-      const res = await wahaRequest(`/api/screenshot?session=${sessionName}`);
+      // Try WAHA QR image endpoint first
+      let res = await wahaRequest(`/api/${sessionName}/auth/qr.png`);
+      if (!res.ok) {
+        // Fallback to screenshot endpoint
+        res = await wahaRequest(`/api/screenshot?session=${sessionName}`);
+      }
       if (!res.ok) return NextResponse.json({ error: "QR not available" }, { status: 404 });
       const buffer = await res.arrayBuffer();
       return new NextResponse(buffer, {

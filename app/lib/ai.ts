@@ -20,7 +20,7 @@ Jangan panjang lebar — eksekutif butuh jawaban singkat dan actionable.`;
 export async function generateAIResponse(
   userId: string,
   userMessage: string,
-  channel: "whatsapp" | "telegram"
+  channel: "whatsapp" | "telegram" | "web"
 ): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
