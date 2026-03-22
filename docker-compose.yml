@@ -5,8 +5,7 @@ services:
     expose:
       - "3000"
     depends_on:
-      db:
-        condition: service_healthy
+      - db
     environment:
       - NODE_ENV=production
       - DATABASE_URL=${DATABASE_URL:-postgresql://zeniclaw:zeniclaw@db:5432/zeniclaw}
