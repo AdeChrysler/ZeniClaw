@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 
-const WAHA_URL = process.env.WAHA_URL || "http://waha-rvvv2rgmxcc0ls629wsz3b24:3000";
+const WAHA_URL = process.env.WAHA_URL || "http://waha.sixzenith.com:3003";
+const WAHA_API_KEY = process.env.WAHA_API_KEY || "666";
 
 export async function GET() {
   const checks: Record<string, unknown> = {};
 
   // Check WAHA
   try {
-    const wahaRes = await fetch(`${WAHA_URL}/api/version`, { 
-      signal: AbortSignal.timeout(5000) 
+    const wahaRes = await fetch(`${WAHA_URL}/api/version`, {
+      headers: { "X-Api-Key": WAHA_API_KEY },
+      signal: AbortSignal.timeout(5000)
     });
     if (wahaRes.ok) {
       const data = await wahaRes.json();
