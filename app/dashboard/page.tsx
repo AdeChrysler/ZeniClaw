@@ -4,11 +4,17 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 
 type WAStatus = "STOPPED" | "STARTING" | "SCAN_QR_CODE" | "WORKING" | "FAILED" | "UNKNOWN";
+type TGStatus = "CONNECTED" | "NOT_CONFIGURED" | "ERROR";
 
 interface StatusData {
   status: WAStatus;
   me?: { id: string; pushName: string } | null;
   error?: string;
+}
+
+interface TelegramStatusData {
+  status: TGStatus;
+  bot?: { username: string; name: string } | null;
 }
 
 const activities = [
@@ -45,8 +51,34 @@ function StatusBadge({ status }: { status: WAStatus }) {
   );
 }
 
+function TelegramBadge({ status, bot }: { status: TGStatus; bot?: { username: string; name: string } | null }) {
+  if (status === "CONNECTED" && bot) {
+    return (
+      <div className="flex items-center gap-2 text-sm font-medium text-emerald-400">
+        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        Connected
+      </div>
+    );
+  }
+  if (status === "NOT_CONFIGURED") {
+    return (
+      <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
+        <span className="w-2 h-2 rounded-full bg-zinc-500" />
+        Not configured
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2 text-sm font-medium text-red-400">
+      <span className="w-2 h-2 rounded-full bg-red-400" />
+      Error
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [waStatus, setWaStatus] = useState<StatusData>({ status: "STOPPED" });
+  const [tgStatus, setTgStatus] = useState<TelegramStatusData>({ status: "NOT_CONFIGURED" });
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [qrError, setQrError] = useState(false);
@@ -54,9 +86,14 @@ export default function Dashboard() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch("/api/whatsapp?action=status", { cache: "no-store" });
-      const data: StatusData = await res.json();
-      setWaStatus(data);
+      const [waRes, tgRes] = await Promise.all([
+        fetch("/api/whatsapp?action=status", { cache: "no-store" }),
+        fetch("/api/telegram", { cache: "no-store" }),
+      ]);
+      const waData: StatusData = await waRes.json();
+      const tgData: TelegramStatusData = await tgRes.json();
+      setWaStatus(waData);
+      setTgStatus(tgData);
     } catch {
       setWaStatus({ status: "STOPPED", error: "Service unavailable" });
     } finally {
@@ -83,6 +120,7 @@ export default function Dashboard() {
 
   const showQR = waStatus.status === "SCAN_QR_CODE" || waStatus.status === "STARTING";
   const isConnected = waStatus.status === "WORKING";
+  const isTgConnected = tgStatus.status === "CONNECTED";
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -108,7 +146,7 @@ export default function Dashboard() {
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         {/* Status cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           {/* WhatsApp status */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
             <div className="flex items-center justify-between mb-3">
@@ -125,6 +163,22 @@ export default function Dashboard() {
             )}
           </div>
 
+          {/* Telegram status */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm text-zinc-400 font-medium">Telegram</span>
+              <span className="text-xl">✈️</span>
+            </div>
+            {loading ? (
+              <div className="h-5 w-24 bg-zinc-800 rounded animate-pulse" />
+            ) : (
+              <TelegramBadge status={tgStatus.status} bot={tgStatus.bot} />
+            )}
+            {isTgConnected && tgStatus.bot && (
+              <p className="text-xs text-zinc-500 mt-1">@{tgStatus.bot.username}</p>
+            )}
+          </div>
+
           {/* AI Agent status */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
             <div className="flex items-center justify-between mb-3">
@@ -135,7 +189,7 @@ export default function Dashboard() {
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               Online
             </div>
-            <p className="text-xs text-zinc-500 mt-1">Claude Sonnet · Multi-agent</p>
+            <p className="text-xs text-zinc-500 mt-1">Gemini Flash · Multi-agent</p>
           </div>
 
           {/* Activity count */}
@@ -167,7 +221,7 @@ export default function Dashboard() {
                   </p>
                 )}
                 <p className="text-zinc-500 text-sm mt-4">
-                  ZeniClaw sudah aktif dan siap membantu kamu.
+                  ZeniClaw sudah aktif dan siap membantu kamu. Kirim pesan ke WhatsApp yang terhubung!
                 </p>
               </div>
             ) : showQR ? (
@@ -222,71 +276,90 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Activity Feed */}
+          {/* Telegram Panel */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-            <h2 className="text-lg font-semibold mb-1">Activity Feed</h2>
-            <p className="text-sm text-zinc-400 mb-6">Aktivitas ZeniClaw hari ini</p>
+            <h2 className="text-lg font-semibold mb-1">Telegram Connection</h2>
+            <p className="text-sm text-zinc-400 mb-6">
+              Chat dengan ZeniClaw langsung di Telegram.
+            </p>
 
-            {isConnected ? (
-              <div className="space-y-4">
-                {activities.map((a, i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-3 pb-4 border-b border-zinc-800 last:border-0 last:pb-0"
-                  >
-                    <span className="text-lg mt-0.5">{activityIcon[a.type]}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-zinc-200 leading-snug">{a.msg}</p>
-                      <p className="text-xs text-zinc-500 mt-1">{a.time} · Today</p>
-                    </div>
-                  </div>
-                ))}
+            {isTgConnected && tgStatus.bot ? (
+              <div className="text-center py-10">
+                <div className="text-5xl mb-4">✅</div>
+                <p className="font-semibold text-emerald-400 text-lg">Telegram Terhubung</p>
+                <p className="text-zinc-400 text-sm mt-1">@{tgStatus.bot.username}</p>
+                <a
+                  href={`https://t.me/${tgStatus.bot.username}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block mt-4 bg-blue-500 hover:bg-blue-400 text-white font-semibold px-6 py-2 rounded-xl transition-colors text-sm"
+                >
+                  Buka di Telegram
+                </a>
               </div>
             ) : (
-              <div className="text-center py-10">
-                <div className="text-4xl mb-4">💬</div>
-                <p className="text-zinc-500 text-sm">
-                  Hubungkan WhatsApp untuk melihat aktivitas ZeniClaw kamu.
+              <div className="text-center py-8">
+                <div className="text-4xl mb-4">✈️</div>
+                <p className="text-zinc-400 mb-2 text-sm">
+                  {tgStatus.status === "NOT_CONFIGURED"
+                    ? "Telegram bot belum dikonfigurasi."
+                    : "Telegram bot tidak tersedia."}
                 </p>
+                <p className="text-zinc-500 text-xs mb-6">
+                  Hubungi admin untuk mengaktifkan Telegram.
+                </p>
+                <div className="bg-zinc-800 rounded-xl p-4 text-left text-xs text-zinc-400 space-y-1">
+                  <p className="font-semibold text-zinc-300 mb-2">Setup Instructions:</p>
+                  <p>1. Create bot via @BotFather on Telegram</p>
+                  <p>2. Set TELEGRAM_BOT_TOKEN in environment</p>
+                  <p>3. Restart the app</p>
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Quick actions */}
+        {/* Activity Feed */}
         <div className="mt-6 bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
-          <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { icon: "☀️", label: "Request Briefing", desc: "Kirim briefing sekarang" },
-              { icon: "✅", label: "Add Task", desc: "Tambah task baru" },
-              { icon: "📧", label: "Triage Email", desc: "Ringkasan inbox kamu" },
-              { icon: "⚙️", label: "Settings", desc: "Konfigurasi ZeniClaw" },
-            ].map((a) => (
-              <button
-                key={a.label}
-                className="bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl p-4 text-left transition-colors group"
-                onClick={() => alert("Feature coming soon! Connect WhatsApp to get started.")}
-              >
-                <div className="text-2xl mb-2">{a.icon}</div>
-                <div className="font-medium text-sm">{a.label}</div>
-                <div className="text-xs text-zinc-500 mt-0.5">{a.desc}</div>
-              </button>
-            ))}
-          </div>
+          <h2 className="text-lg font-semibold mb-1">Activity Feed</h2>
+          <p className="text-sm text-zinc-400 mb-6">Aktivitas ZeniClaw hari ini</p>
+
+          {isConnected ? (
+            <div className="space-y-4">
+              {activities.map((a, i) => (
+                <div
+                  key={i}
+                  className="flex items-start gap-3 pb-4 border-b border-zinc-800 last:border-0 last:pb-0"
+                >
+                  <span className="text-lg mt-0.5">{activityIcon[a.type]}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-zinc-200 leading-snug">{a.msg}</p>
+                    <p className="text-xs text-zinc-500 mt-1">{a.time} · Today</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-10">
+              <div className="text-4xl mb-4">💬</div>
+              <p className="text-zinc-500 text-sm">
+                Hubungkan WhatsApp atau Telegram untuk melihat aktivitas ZeniClaw kamu.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Getting started notice */}
-        {!isConnected && (
+        {!isConnected && !isTgConnected && (
           <div className="mt-6 bg-emerald-950/40 border border-emerald-500/30 rounded-2xl p-6 flex items-start gap-4">
             <span className="text-2xl">💡</span>
             <div>
               <h3 className="font-semibold text-emerald-400 mb-1">
-                Mulai dengan menghubungkan WhatsApp
+                Mulai dengan menghubungkan WhatsApp atau Telegram
               </h3>
               <p className="text-sm text-zinc-400">
-                Scan QR code di panel sebelah kiri untuk mengaktifkan ZeniClaw. Setelah terhubung,
-                kirim pesan &ldquo;/start&rdquo; ke ZeniClaw di WhatsApp untuk memulai onboarding.
+                Scan QR code untuk mengaktifkan WhatsApp, atau chat via Telegram bot.
+                Setelah terhubung, kirim pesan &ldquo;halo&rdquo; ke ZeniClaw untuk memulai!
               </p>
             </div>
           </div>

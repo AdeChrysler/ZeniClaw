@@ -6,26 +6,8 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - WAHA_URL=http://waha:3000
-    depends_on:
-      - waha
-    networks:
-      - zeniclaw
-
-  waha:
-    image: devlikeapro/waha:latest
-    restart: unless-stopped
-    environment:
-      - WHATSAPP_DEFAULT_ENGINE=WEBJS
-      - WAHA_DASHBOARD_ENABLED=false
-    volumes:
-      - waha_sessions:/app/.sessions
-    networks:
-      - zeniclaw
-
-volumes:
-  waha_sessions:
-
-networks:
-  zeniclaw:
-    driver: bridge
+      - WAHA_URL=${WAHA_URL:-http://waha.sixzenith.space:3003}
+      - WAHA_API_KEY=${WAHA_API_KEY:-666}
+      - APP_URL=${APP_URL:-https://zeniclaw.zenova.id}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
