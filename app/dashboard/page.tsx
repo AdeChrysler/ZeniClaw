@@ -18,11 +18,11 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
+  const [qrError, setQrError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [disconnectError, setDisconnectError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
-  const [qrError, setQrError] = useState<string | null>(null);
   const [botTokenInput, setBotTokenInput] = useState("");
   const [savingToken, setSavingToken] = useState(false);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -48,6 +48,7 @@ export default function DashboardPage() {
     const interval = setInterval(() => {
       setQrUrl(`/api/whatsapp?action=qr&t=${Date.now()}`);
       setQrLoading(true);
+      setQrError(null);
     }, 3000);
     return () => clearInterval(interval);
   }, [waStatusRef.current]); // eslint-disable-line react-hooks/exhaustive-deps
