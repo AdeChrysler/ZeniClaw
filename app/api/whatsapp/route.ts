@@ -1,120 +1,139 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/app/lib/auth";
+import { prisma } from "@/app/lib/db";
 
-const WAHA_URL = process.env.WAHA_URL || "http://waha:3000";
-const WAHA_API_KEY = process.env.WAHA_API_KEY || "";
-const SESSION = "zeniclaw";
+const WAHA_URL = process.env.WAHA_URL || "http://waha.sixzenith.space:3003";
+const WAHA_API_KEY = process.env.WAHA_API_KEY || "666";
 const APP_URL = process.env.APP_URL || "https://zeniclaw.zenova.id";
 
-function wahaHeaders() {
-  const h: Record<string, string> = { "Content-Type": "application/json" };
-  if (WAHA_API_KEY) h["X-Api-Key"] = WAHA_API_KEY;
-  return h;
+async function wahaRequest(path: string, method = "GET", body?: object) {
+  const res = await fetch(`${WAHA_URL}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Api-Key": WAHA_API_KEY,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return res;
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = request.nextUrl;
-  const action = searchParams.get("action") || "status";
+  const session = await requireAuth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const userId = session.user.id;
+  const sessionName = `zeniclaw-${userId}`;
+  const action = request.nextUrl.searchParams.get("action");
 
   try {
     if (action === "qr") {
-      const res = await fetch(
-        `${WAHA_URL}/api/${SESSION}/auth/qr?format=image`,
-        { cache: "no-store", headers: wahaHeaders() }
-      );
-      if (!res.ok) {
-        return Response.json(
-          { error: "WhatsApp agent not ready", code: "NOT_READY" },
-          { status: 503 }
-        );
-      }
-      const buf = await res.arrayBuffer();
-      return new Response(buf, {
-        headers: {
-          "Content-Type": "image/png",
-          "Cache-Control": "no-cache, no-store",
-        },
+      const res = await wahaRequest(`/api/screenshot?session=${sessionName}`);
+      if (!res.ok) return NextResponse.json({ error: "QR not available" }, { status: 404 });
+      const buffer = await res.arrayBuffer();
+      return new NextResponse(buffer, {
+        headers: { "Content-Type": "image/png" },
       });
     }
 
     if (action === "status") {
-      const res = await fetch(`${WAHA_URL}/api/sessions/${SESSION}`, {
-        cache: "no-store",
-        headers: wahaHeaders(),
-      });
+      const res = await wahaRequest(`/api/sessions/${sessionName}`);
       if (!res.ok) {
-        return Response.json({ status: "STOPPED", session: SESSION });
+        return NextResponse.json({ status: "disconnected", sessionName });
       }
       const data = await res.json();
-      return Response.json({
-        status: data.status || "UNKNOWN",
-        session: SESSION,
-        me: data.me || null,
+      const status = data.status || "disconnected";
+
+      // Update DB if connected
+      if (status === "WORKING") {
+        const me = await wahaRequest(`/api/sessions/${sessionName}/me`);
+        if (me.ok) {
+          const meData = await me.json();
+          await prisma.whatsAppConnection.upsert({
+            where: { userId },
+            create: {
+              userId,
+              sessionName,
+              status: "connected",
+              phoneNumber: meData.id?.replace("@c.us", "") || null,
+              pushName: meData.pushName || null,
+              connectedAt: new Date(),
+            },
+            update: {
+              status: "connected",
+              phoneNumber: meData.id?.replace("@c.us", "") || null,
+              pushName: meData.pushName || null,
+              connectedAt: new Date(),
+            },
+          });
+        }
+      }
+
+      // Return DB connection info
+      const conn = await prisma.whatsAppConnection.findUnique({ where: { userId } });
+      return NextResponse.json({
+        status: conn?.status || "disconnected",
+        sessionName,
+        phoneNumber: conn?.phoneNumber || null,
+        pushName: conn?.pushName || null,
+        wahaStatus: status,
       });
     }
 
-    return Response.json({ error: "Unknown action" }, { status: 400 });
-  } catch {
-    return Response.json(
-      { error: "WhatsApp service unavailable", status: "STOPPED" },
-      { status: 503 }
-    );
+    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  } catch (err) {
+    console.error("WhatsApp API error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
-  const { searchParams } = request.nextUrl;
-  const action = searchParams.get("action");
+  const session = await requireAuth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (action === "start") {
-    try {
-      // Start session with webhook configured so WAHA calls us on new messages
-      const res = await fetch(`${WAHA_URL}/api/sessions`, {
-        method: "POST",
-        headers: wahaHeaders(),
-        body: JSON.stringify({
-          name: SESSION,
-          config: {
-            webhooks: [
-              {
-                url: `${APP_URL}/api/whatsapp/webhook`,
-                events: ["message"],
-                hmac: null,
-              },
-            ],
-          },
-        }),
+  const userId = session.user.id;
+  const sessionName = `zeniclaw-${userId}`;
+  const action = request.nextUrl.searchParams.get("action");
+
+  try {
+    if (action === "start") {
+      // Create WAHA session for this user
+      const webhookUrl = `${APP_URL}/api/whatsapp/webhook?userId=${userId}`;
+      await wahaRequest(`/api/sessions`, "POST", {
+        name: sessionName,
+        start: true,
+        config: {
+          webhooks: [
+            {
+              url: webhookUrl,
+              events: ["message"],
+            },
+          ],
+        },
       });
-      const data = await res.json();
-      return Response.json(data, { status: res.status });
-    } catch {
-      return Response.json({ error: "Failed to start session" }, { status: 503 });
-    }
-  }
 
-  if (action === "setup-webhook") {
-    // Update webhook on existing session
-    try {
-      const res = await fetch(`${WAHA_URL}/api/sessions/${SESSION}`, {
-        method: "PUT",
-        headers: wahaHeaders(),
-        body: JSON.stringify({
-          config: {
-            webhooks: [
-              {
-                url: `${APP_URL}/api/whatsapp/webhook`,
-                events: ["message"],
-                hmac: null,
-              },
-            ],
-          },
-        }),
+      await prisma.whatsAppConnection.upsert({
+        where: { userId },
+        create: { userId, sessionName, status: "connecting" },
+        update: { status: "connecting" },
       });
-      const data = await res.json();
-      return Response.json(data, { status: res.status });
-    } catch {
-      return Response.json({ error: "Failed to setup webhook" }, { status: 503 });
-    }
-  }
 
-  return Response.json({ error: "Unknown action" }, { status: 400 });
+      return NextResponse.json({ ok: true, sessionName });
+    }
+
+    if (action === "disconnect") {
+      await wahaRequest(`/api/sessions/${sessionName}/stop`, "POST");
+      await wahaRequest(`/api/sessions/${sessionName}`, "DELETE");
+      await prisma.whatsAppConnection.updateMany({
+        where: { userId },
+        data: { status: "disconnected", phoneNumber: null, pushName: null, connectedAt: null },
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  } catch (err) {
+    console.error("WhatsApp POST error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
 }

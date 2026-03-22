@@ -1,58 +1,81 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/app/lib/auth";
+import { prisma } from "@/app/lib/db";
+import { nanoid } from "nanoid";
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
-const APP_URL = process.env.APP_URL || "https://zeniclaw.zenova.id";
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-function telegramApi(method: string) {
-  return `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`;
+async function telegramApi(method: string, body?: object) {
+  if (!BOT_TOKEN) throw new Error("No TELEGRAM_BOT_TOKEN");
+  const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return res.json();
 }
 
-export async function GET() {
-  if (!TELEGRAM_BOT_TOKEN) {
-    return Response.json({ status: "NOT_CONFIGURED", message: "TELEGRAM_BOT_TOKEN not set" });
-  }
+export async function GET(request: NextRequest) {
+  const session = await requireAuth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const userId = session.user.id;
+  const action = request.nextUrl.searchParams.get("action");
 
   try {
-    const [meRes, webhookRes] = await Promise.all([
-      fetch(telegramApi("getMe")),
-      fetch(telegramApi("getWebhookInfo")),
-    ]);
+    // Get or create telegram connection record
+    let conn = await prisma.telegramConnection.findUnique({ where: { userId } });
 
-    const me = await meRes.json();
-    const webhookInfo = await webhookRes.json();
+    if (action === "generate-code" || !conn?.linkCode) {
+      const linkCode = nanoid(8).toUpperCase();
+      conn = await prisma.telegramConnection.upsert({
+        where: { userId },
+        create: { userId, linkCode, status: "pending" },
+        update: { linkCode, status: conn?.chatId ? conn.status : "pending" },
+      });
+    }
 
-    return Response.json({
-      status: me.ok ? "CONNECTED" : "ERROR",
-      bot: me.ok ? { username: me.result.username, name: me.result.first_name } : null,
-      webhook: webhookInfo.ok ? webhookInfo.result : null,
+    // Get bot info
+    let botUsername = null;
+    if (BOT_TOKEN) {
+      try {
+        const botInfo = await telegramApi("getMe", {});
+        botUsername = botInfo?.result?.username;
+      } catch {
+        // ignore bot info errors
+      }
+    }
+
+    return NextResponse.json({
+      status: conn?.status || "pending",
+      linkCode: conn?.linkCode || null,
+      chatId: conn?.chatId || null,
+      username: conn?.username || null,
+      botUsername,
     });
-  } catch {
-    return Response.json({ status: "ERROR", message: "Failed to reach Telegram API" }, { status: 503 });
+  } catch (err) {
+    console.error("Telegram GET error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
-  const { searchParams } = request.nextUrl;
-  const action = searchParams.get("action");
-
-  if (!TELEGRAM_BOT_TOKEN) {
-    return Response.json({ error: "TELEGRAM_BOT_TOKEN not configured" }, { status: 503 });
-  }
+  const action = request.nextUrl.searchParams.get("action");
 
   if (action === "setup-webhook") {
+    const session = await requireAuth();
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const APP_URL = process.env.APP_URL || "https://zeniclaw.zenova.id";
     try {
-      const webhookUrl = `${APP_URL}/api/telegram/webhook`;
-      const res = await fetch(telegramApi("setWebhook"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: webhookUrl }),
+      const result = await telegramApi("setWebhook", {
+        url: `${APP_URL}/api/telegram/webhook`,
       });
-      const data = await res.json();
-      return Response.json(data, { status: res.status });
+      return NextResponse.json(result);
     } catch {
-      return Response.json({ error: "Failed to set webhook" }, { status: 503 });
+      return NextResponse.json({ error: "Failed to setup webhook" }, { status: 500 });
     }
   }
 
-  return Response.json({ error: "Unknown action" }, { status: 400 });
+  return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }

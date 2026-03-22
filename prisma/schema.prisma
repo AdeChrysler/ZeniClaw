@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  name        String?
+  avatar      String?
+  plan        String   @default("free_trial")
+  trialEndsAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  whatsappConnection WhatsAppConnection?
+  telegramConnection TelegramConnection?
+  messages           Message[]
+
+  @@map("users")
+}
+
+model WhatsAppConnection {
+  id          String    @id @default(cuid())
+  userId      String    @unique
+  sessionName String    @unique
+  status      String    @default("disconnected")
+  phoneNumber String?
+  pushName    String?
+  connectedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("whatsapp_connections")
+}
+
+model TelegramConnection {
+  id       String  @id @default(cuid())
+  userId   String  @unique
+  chatId   String?
+  linkCode String? @unique
+  status   String  @default("pending")
+  username String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("telegram_connections")
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  userId    String
+  channel   String
+  role      String
+  content   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("messages")
+}

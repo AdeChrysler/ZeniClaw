@@ -1,60 +1,86 @@
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
+import { prisma } from "./db";
 
-const SYSTEM_PROMPT = `You are ZeniClaw, an AI Chief of Staff for busy CEOs and professionals in Southeast Asia.
-You are helpful, proactive, and concise. You operate via WhatsApp and Telegram.
+const GEMINI_API_URL =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
-Your core capabilities:
-- Daily briefings and calendar summaries
-- Task creation, tracking, and reminders
-- Email triage and draft responses
-- Meeting prep and follow-ups
-- Research and business intel
-- Team coordination and delegation
+const SYSTEM_PROMPT = `Kamu adalah ZeniClaw — AI Chief of Staff personal untuk eksekutif dan profesional sibuk.
 
-Respond in the same language as the user (Bahasa Indonesia or English).
-Keep responses concise and actionable — this is a chat interface.
-If asked to do something outside your capabilities, politely explain and suggest what you CAN help with.`;
+Kemampuan utamamu:
+1. Daily Briefing — ringkasan harian (kalender, tugas, prioritas, metrik)
+2. Task Management — buat, assign, tracking via bahasa natural
+3. Email Triage — ringkasan inbox, draft balasan, flag urgent
+4. Meeting Prep — brief otomatis dengan konteks peserta
+5. Research & Intel — analisis kompetitor, riset pasar, info perusahaan
+6. Team Relay — delegasi tugas ke tim via chat
 
-export async function generateAIResponse(userMessage: string): Promise<string> {
-  if (!GEMINI_API_KEY) {
-    return "ZeniClaw AI is not configured yet. Please add GEMINI_API_KEY to activate intelligent responses.";
+Jawab dalam bahasa yang digunakan user (Indonesia atau Inggris).
+Bersikap profesional, efisien, dan proaktif.
+Jangan panjang lebar — eksekutif butuh jawaban singkat dan actionable.`;
+
+export async function generateAIResponse(
+  userId: string,
+  userMessage: string,
+  channel: "whatsapp" | "telegram"
+): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return "Maaf, layanan AI sedang tidak tersedia. Silakan coba lagi nanti.";
   }
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: SYSTEM_PROMPT }],
-          },
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: userMessage }],
-            },
-          ],
-          generationConfig: {
-            maxOutputTokens: 500,
-            temperature: 0.7,
-          },
-        }),
-      }
-    );
+    // Fetch last 20 messages for context
+    const history = await prisma.message.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+    history.reverse();
 
-    if (!res.ok) {
-      const err = await res.text();
-      console.error("Gemini error:", err);
-      return "Maaf, ZeniClaw sedang mengalami gangguan. Coba lagi sebentar. (AI service error)";
+    // Build conversation context
+    const contents = history.map((msg) => ({
+      role: msg.role === "assistant" ? "model" : "user",
+      parts: [{ text: msg.content }],
+    }));
+
+    // Add current message
+    contents.push({
+      role: "user",
+      parts: [{ text: userMessage }],
+    });
+
+    const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents,
+        generationConfig: {
+          maxOutputTokens: 500,
+          temperature: 0.7,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
     }
 
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    return text || "Maaf, tidak ada respons dari AI. Coba lagi.";
-  } catch (err) {
-    console.error("AI generation failed:", err);
-    return "Maaf, ZeniClaw sedang tidak tersedia. Coba lagi nanti.";
+    const data = await response.json();
+    const reply =
+      data.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "Maaf, saya tidak dapat memproses pesan tersebut.";
+
+    // Save both messages to DB
+    await prisma.message.createMany({
+      data: [
+        { userId, channel, role: "user", content: userMessage },
+        { userId, channel, role: "assistant", content: reply },
+      ],
+    });
+
+    return reply;
+  } catch (error) {
+    console.error("AI error:", error);
+    return "Maaf, ada kendala teknis saat ini. Silakan coba lagi dalam beberapa saat.";
   }
 }

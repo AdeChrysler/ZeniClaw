@@ -1,60 +1,66 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { generateAIResponse } from "@/app/lib/ai";
 
-const WAHA_URL = process.env.WAHA_URL || "http://waha:3000";
-const WAHA_API_KEY = process.env.WAHA_API_KEY || "";
-const SESSION = "zeniclaw";
-
-function wahaHeaders() {
-  const h: Record<string, string> = { "Content-Type": "application/json" };
-  if (WAHA_API_KEY) h["X-Api-Key"] = WAHA_API_KEY;
-  return h;
-}
-
-async function sendWhatsAppMessage(chatId: string, text: string) {
-  await fetch(`${WAHA_URL}/api/sendText`, {
-    method: "POST",
-    headers: wahaHeaders(),
-    body: JSON.stringify({ chatId, text, session: SESSION }),
-  });
-}
+const WAHA_URL = process.env.WAHA_URL || "http://waha.sixzenith.space:3003";
+const WAHA_API_KEY = process.env.WAHA_API_KEY || "666";
 
 export async function POST(request: NextRequest) {
-  let body: Record<string, unknown>;
   try {
-    body = await request.json();
-  } catch {
-    return Response.json({ ok: false }, { status: 400 });
+    // userId passed as query param when session was created
+    const userId = request.nextUrl.searchParams.get("userId");
+
+    const payload = await request.json();
+    const event = payload?.event;
+
+    if (event !== "message") return NextResponse.json({ ok: true });
+
+    const message = payload?.payload;
+    if (!message) return NextResponse.json({ ok: true });
+
+    const fromMe = message?.fromMe;
+    if (fromMe) return NextResponse.json({ ok: true });
+
+    const text = message?.body;
+    const chatId = message?.from;
+    const sessionName = payload?.session;
+
+    if (!text || !chatId) return NextResponse.json({ ok: true });
+
+    // Resolve userId from sessionName if not in query param
+    let resolvedUserId = userId;
+    if (!resolvedUserId && sessionName) {
+      // session name format: zeniclaw-{userId}
+      resolvedUserId = sessionName.replace("zeniclaw-", "");
+    }
+
+    if (!resolvedUserId) {
+      console.error("No userId found for webhook");
+      return NextResponse.json({ ok: true });
+    }
+
+    const reply = await generateAIResponse(resolvedUserId, text, "whatsapp");
+
+    // Send reply via WAHA
+    await fetch(`${WAHA_URL}/api/sendText`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Api-Key": WAHA_API_KEY,
+      },
+      body: JSON.stringify({
+        session: sessionName,
+        chatId,
+        text: reply,
+      }),
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("WhatsApp webhook error:", err);
+    return NextResponse.json({ ok: true });
   }
-
-  const event = body.event as string;
-  if (event !== "message") {
-    return Response.json({ ok: true, skipped: true });
-  }
-
-  const payload = body.payload as Record<string, unknown> | undefined;
-  if (!payload) return Response.json({ ok: true });
-
-  // Skip messages sent by us
-  if (payload.fromMe === true) return Response.json({ ok: true, skipped: "fromMe" });
-
-  // Only handle text messages
-  const messageType = payload.type as string;
-  if (messageType !== "chat") return Response.json({ ok: true, skipped: "non-text" });
-
-  const chatId = payload.from as string;
-  const text = payload.body as string;
-
-  if (!chatId || !text) return Response.json({ ok: true });
-
-  // Generate AI response and reply
-  const reply = await generateAIResponse(text);
-  await sendWhatsAppMessage(chatId, reply);
-
-  return Response.json({ ok: true });
 }
 
-// WAHA may send GET for webhook verification
 export async function GET() {
-  return Response.json({ ok: true, service: "zeniclaw-whatsapp-webhook" });
+  return NextResponse.json({ ok: true, service: "zeniclaw-whatsapp-webhook" });
 }
