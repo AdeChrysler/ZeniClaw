@@ -9,7 +9,7 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=${DATABASE_URL:-postgresql://zeniclaw:zeniclaw@db:5432/zeniclaw}
-      - WAHA_URL=${WAHA_URL:-http://waha.sixzenith.space:3003}
+      - WAHA_URL=${WAHA_URL:-http://waha.sixzenith.com:3003}
       - WAHA_API_KEY=${WAHA_API_KEY:-666}
       - APP_URL=${APP_URL:-https://zeniclaw.zenova.id}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
