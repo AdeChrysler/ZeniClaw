@@ -50,8 +50,39 @@ export async function GET(request: NextRequest) {
 
   try {
     if (action === "qr") {
+      // Wait for session to reach SCAN_QR_CODE state before fetching QR
+      // WAHA sessions start in STARTING state and transition to SCAN_QR_CODE after a few seconds
+      const maxWaitMs = 12000;
+      const pollIntervalMs = 1000;
+      const startTime = Date.now();
+
+      let sessionReady = false;
+      while (Date.now() - startTime < maxWaitMs) {
+        const sessionRes = await wahaRequest(`/api/sessions/${sessionName}`);
+        if (sessionRes.ok) {
+          const sessionData = sessionRes.json();
+          const st = sessionData?.status;
+          console.log(`[WAHA] Session ${sessionName} state: ${st}`);
+          if (st === "SCAN_QR_CODE" || st === "WORKING") {
+            sessionReady = true;
+            break;
+          }
+          if (st === "STOPPED" || st === "FAILED") {
+            // Session is in a terminal bad state — no point waiting
+            break;
+          }
+        } else {
+          // Session doesn't exist yet — wait
+        }
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      }
+
+      if (!sessionReady) {
+        console.error(`[WAHA] QR not ready for ${sessionName} after ${maxWaitMs}ms`);
+        return NextResponse.json({ error: "QR belum siap, silakan tunggu dan coba lagi" }, { status: 503 });
+      }
+
       // Return QR image as raw bytes — use raw fetch to preserve binary
-      // WAHA QR endpoint is /auth/qr (no .png extension — qr.png returns 404)
       const res = await wahaRequestRaw(`/api/${sessionName}/auth/qr`);
       if (!res.ok) {
         const errText = await res.text().catch(() => "unknown");
@@ -125,6 +156,13 @@ export async function POST(request: NextRequest) {
 
   try {
     if (action === "start") {
+      // Reset any stale 'connecting' record for this user before trying to create a new session
+      // This ensures a clean slate so the QR flow starts fresh
+      await prisma.whatsAppConnection.updateMany({
+        where: { userId, status: "connecting" },
+        data: { status: "disconnected" },
+      });
+
       // Check if session already exists first
       const existingSession = await wahaRequest(`/api/sessions/${sessionName}`);
       if (existingSession.ok) {

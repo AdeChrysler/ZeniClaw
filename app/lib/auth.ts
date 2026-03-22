@@ -46,6 +46,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async jwt({ token, user }) {
       if (user?.id) {
         token.userId = user.id;
+      } else if (!token.userId && token.email) {
+        // Backfill userId for sessions created before userId was stored in JWT
+        try {
+          const dbUser = await prisma.user.findUnique({ where: { email: token.email as string } });
+          if (dbUser) token.userId = dbUser.id;
+        } catch { /* ignore DB errors */ }
       }
       return token;
     },
