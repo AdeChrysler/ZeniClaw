@@ -19,6 +19,16 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-}
       - AUTH_SECRET=${NEXTAUTH_SECRET:-}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.zeniclaw.rule=Host(`zeniclaw.zenova.id`)
+      - traefik.http.routers.zeniclaw.entrypoints=https
+      - traefik.http.routers.zeniclaw.tls=true
+      - traefik.http.routers.zeniclaw.tls.certresolver=letsencrypt
+      - traefik.http.services.zeniclaw.loadbalancer.server.port=3000
+      - traefik.http.routers.zeniclaw-http.rule=Host(`zeniclaw.zenova.id`)
+      - traefik.http.routers.zeniclaw-http.entrypoints=http
+      - traefik.http.routers.zeniclaw-http.middlewares=redirect-to-https
     networks:
       - coolify
       - default
