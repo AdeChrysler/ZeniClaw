@@ -22,6 +22,7 @@ export default function DashboardPage() {
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [disconnectError, setDisconnectError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [qrError, setQrError] = useState<string | null>(null);
   const [botTokenInput, setBotTokenInput] = useState("");
   const [savingToken, setSavingToken] = useState(false);
   const [tokenError, setTokenError] = useState<string | null>(null);
@@ -66,9 +67,11 @@ export default function DashboardPage() {
       if (d.whatsapp?.status === "connecting") {
         setQrUrl(`/api/whatsapp?action=qr&t=${Date.now()}`);
         setQrLoading(true);
+        setQrError(null);
       } else if (d.whatsapp?.status === "connected") {
         setQrUrl(null);
         setQrLoading(false);
+        setQrError(null);
       }
     } catch (err) {
       console.error(err);
@@ -80,10 +83,13 @@ export default function DashboardPage() {
 
   async function connectWhatsApp() {
     setConnecting(true);
+    setDashboardError(null);
     try {
       const res = await fetch("/api/whatsapp?action=start", { method: "POST" });
       if (!res.ok) {
-        setDashboardError("Gagal memulai sesi WhatsApp. Pastikan layanan WAHA aktif.");
+        const d = await res.json().catch(() => ({}));
+        setDashboardError(d.error || "Gagal memulai sesi WhatsApp. Pastikan layanan WAHA aktif.");
+        return;
       }
       await fetchDashboard();
     } catch {
@@ -217,18 +223,19 @@ export default function DashboardPage() {
                       src={qrUrl}
                       alt="QR Code"
                       className="w-full h-full object-contain"
-                      onLoad={() => setQrLoading(false)}
+                      onLoad={() => { setQrLoading(false); setQrError(null); }}
                       onError={() => {
                         setQrLoading(false);
-                        // Don't clear URL — keep retrying on next poll
+                        setQrError("QR gagal dimuat — sesi WAHA belum siap, coba tunggu beberapa detik");
                       }}
                     />
                   ) : (
                     <div className="text-zinc-400 text-xs text-center">Memuat QR...</div>
                   )}
                 </div>
-                {qrLoading && <p className="text-zinc-500 text-xs">Memuat QR code...</p>}
-                {!qrLoading && qrUrl && <p className="text-zinc-500 text-xs">QR akan diperbarui otomatis setiap 3 detik</p>}
+                {qrError && <p className="text-amber-400 text-xs">{qrError}</p>}
+                {!qrError && qrLoading && <p className="text-zinc-500 text-xs">Memuat QR code...</p>}
+                {!qrError && !qrLoading && qrUrl && <p className="text-zinc-500 text-xs">QR akan diperbarui otomatis setiap 3 detik</p>}
               </div>
             ) : (
               <div className="space-y-4">
