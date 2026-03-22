@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/db";
 
-const WAHA_URL = process.env.WAHA_URL || "http://waha-rvvv2rgmxcc0ls629wsz3b24:3000";
+const WAHA_URL = process.env.WAHA_URL;
 const WAHA_API_KEY = process.env.WAHA_API_KEY || "666";
 const APP_URL = process.env.APP_URL || "https://zeniclaw.zenova.id";
 

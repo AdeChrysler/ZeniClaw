@@ -19,6 +19,8 @@ export default function DashboardPage() {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [disconnectError, setDisconnectError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [botTokenInput, setBotTokenInput] = useState("");
   const [savingToken, setSavingToken] = useState(false);
@@ -52,7 +54,11 @@ export default function DashboardPage() {
   async function fetchDashboard() {
     try {
       const res = await fetch("/api/dashboard");
-      if (!res.ok) return;
+      if (!res.ok) {
+        setDashboardError("Gagal memuat dashboard. Silakan muat ulang halaman.");
+        return;
+      }
+      setDashboardError(null);
       const d = await res.json();
       setData(d);
       waStatusRef.current = d.whatsapp?.status ?? null;
@@ -66,6 +72,7 @@ export default function DashboardPage() {
       }
     } catch (err) {
       console.error(err);
+      setDashboardError("Gagal memuat dashboard. Periksa koneksi internet kamu.");
     } finally {
       setLoading(false);
     }
@@ -74,18 +81,31 @@ export default function DashboardPage() {
   async function connectWhatsApp() {
     setConnecting(true);
     try {
-      await fetch("/api/whatsapp?action=start", { method: "POST" });
+      const res = await fetch("/api/whatsapp?action=start", { method: "POST" });
+      if (!res.ok) {
+        setDashboardError("Gagal memulai sesi WhatsApp. Pastikan layanan WAHA aktif.");
+      }
       await fetchDashboard();
-    } catch (err) {
-      console.error(err);
+    } catch {
+      setDashboardError("Gagal menghubungkan WhatsApp. Periksa koneksi internet kamu.");
     } finally {
       setConnecting(false);
     }
   }
 
   async function disconnectWhatsApp() {
-    await fetch("/api/whatsapp?action=disconnect", { method: "POST" });
-    await fetchDashboard();
+    try {
+      setDisconnectError(null);
+      const res = await fetch("/api/whatsapp?action=disconnect", { method: "POST" });
+      if (!res.ok) {
+        setDisconnectError("Gagal memutuskan koneksi WhatsApp. Coba lagi.");
+        return;
+      }
+      await fetchDashboard();
+    } catch (err) {
+      console.error(err);
+      setDisconnectError("Terjadi kesalahan. Silakan coba lagi.");
+    }
   }
 
   async function generateTelegramCode() {
@@ -153,6 +173,11 @@ export default function DashboardPage() {
       </nav>
 
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
+        {dashboardError && (
+          <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
+            {dashboardError}
+          </div>
+        )}
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard label="Pesan Hari Ini" value={String(stats?.messagesToday ?? 0)} />
@@ -179,6 +204,7 @@ export default function DashboardPage() {
                 >
                   Putuskan Koneksi
                 </button>
+                {disconnectError && <p className="text-red-400 text-xs mt-1">{disconnectError}</p>}
               </div>
             ) : wa?.status === "connecting" ? (
               <div className="space-y-4">

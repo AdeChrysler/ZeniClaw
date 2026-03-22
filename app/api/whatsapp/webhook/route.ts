@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateAIResponse } from "@/app/lib/ai";
 
-const WAHA_URL = process.env.WAHA_URL || "http://waha.sixzenith.space:3003";
+const WAHA_URL = process.env.WAHA_URL;
 const WAHA_API_KEY = process.env.WAHA_API_KEY || "666";
 
 export async function POST(request: NextRequest) {

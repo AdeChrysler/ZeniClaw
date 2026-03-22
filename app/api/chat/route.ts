@@ -15,7 +15,8 @@ export async function POST(request: NextRequest) {
   try {
     const reply = await generateAIResponse(session.user.id, message.trim(), "web");
     return NextResponse.json({ reply });
-  } catch {
+  } catch (err) {
+    console.error("Chat API error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

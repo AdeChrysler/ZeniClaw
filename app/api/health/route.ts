@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const WAHA_URL = process.env.WAHA_URL || "http://waha.sixzenith.com:3003";
+const WAHA_URL = process.env.WAHA_URL;
 const WAHA_API_KEY = process.env.WAHA_API_KEY || "666";
 
 export async function GET() {

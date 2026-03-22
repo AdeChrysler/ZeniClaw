@@ -19,6 +19,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [chatError, setChatError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const lastMessageAt = useRef<string | null>(null);
 
@@ -79,7 +80,16 @@ export default function ChatPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),
       });
+
+      if (!res.ok) {
+        // Remove stuck temp message and show error
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        setChatError("Gagal mengirim pesan. Silakan coba lagi.");
+        return;
+      }
+
       const data = await res.json();
+      setChatError(null);
 
       // Replace temp message and add AI reply
       setMessages(prev => {
@@ -91,6 +101,9 @@ export default function ChatPage() {
 
       // Update lastMessageAt so poll doesn't re-fetch these
       lastMessageAt.current = new Date().toISOString();
+    } catch {
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setChatError("Terjadi kesalahan jaringan. Silakan coba lagi.");
     } finally {
       setSending(false);
     }
@@ -152,6 +165,11 @@ export default function ChatPage() {
 
       {/* Input */}
       <div className="border-t border-zinc-800 px-4 py-4 flex-shrink-0">
+        {chatError && (
+          <div className="max-w-3xl mx-auto mb-2 px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
+            {chatError}
+          </div>
+        )}
         <form onSubmit={sendMessage} className="max-w-3xl mx-auto flex gap-3">
           <input
             type="text"
