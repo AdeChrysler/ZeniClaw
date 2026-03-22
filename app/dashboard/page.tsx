@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 interface DashboardData {
   user: { name: string; email: string; plan: string; trialEndsAt: string | null };
   whatsapp: { status: string; phoneNumber: string | null; pushName: string | null };
-  telegram: { status: string; username: string | null; linkCode: string | null };
+  telegram: { status: string; username: string | null; linkCode: string | null; botToken: string | null; botUsername: string | null };
   stats: { messagesToday: number; activeConnections: number };
   recentMessages: Array<{ id: string; channel: string; role: string; content: string; createdAt: string }>;
 }
@@ -18,6 +18,9 @@ export default function DashboardPage() {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
+  const [botTokenInput, setBotTokenInput] = useState("");
+  const [savingToken, setSavingToken] = useState(false);
+  const [tokenError, setTokenError] = useState<string | null>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -73,6 +76,29 @@ export default function DashboardPage() {
   async function generateTelegramCode() {
     await fetch("/api/telegram?action=generate-code");
     await fetchDashboard();
+  }
+
+  async function saveBotToken() {
+    setSavingToken(true);
+    setTokenError(null);
+    try {
+      const res = await fetch("/api/telegram?action=save-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ botToken: botTokenInput.trim() }),
+      });
+      const d = await res.json();
+      if (!res.ok) {
+        setTokenError(d.error || "Gagal menyimpan token");
+      } else {
+        setBotTokenInput("");
+        await fetchDashboard();
+      }
+    } catch {
+      setTokenError("Gagal menyimpan token");
+    } finally {
+      setSavingToken(false);
+    }
   }
 
   if (status === "loading" || loading) {
@@ -167,23 +193,50 @@ export default function DashboardPage() {
           {/* Telegram Panel */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
             <h2 className="text-lg font-semibold mb-4">Telegram</h2>
-            {tg?.status === "connected" ? (
+            {!tg?.botToken ? (
+              <div className="space-y-4">
+                <p className="text-zinc-400 text-sm">Masukkan token bot Telegram kamu. Buat bot baru via <span className="text-blue-400">@BotFather</span> di Telegram, lalu copy token-nya di sini.</p>
+                <input
+                  type="text"
+                  value={botTokenInput}
+                  onChange={(e) => setBotTokenInput(e.target.value)}
+                  placeholder="1234567890:ABCDefGhIJKlmNoPQRsTUVwxyZ"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+                />
+                {tokenError && <p className="text-red-400 text-xs">{tokenError}</p>}
+                <button
+                  onClick={saveBotToken}
+                  disabled={savingToken || !botTokenInput.trim()}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-colors"
+                >
+                  {savingToken ? "Menyimpan..." : "Simpan Token Bot"}
+                </button>
+              </div>
+            ) : tg?.status === "connected" ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 bg-blue-400 rounded-full"></div>
                   <span className="text-blue-400 font-medium">Terhubung</span>
                 </div>
                 {tg.username && <p className="text-zinc-300">@{tg.username}</p>}
+                {tg.botUsername && <p className="text-zinc-500 text-xs">Bot: @{tg.botUsername}</p>}
+                <button
+                  onClick={() => { setBotTokenInput(""); setData(d => d ? { ...d, telegram: { ...d.telegram, botToken: null } } : d); }}
+                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  Ganti bot token
+                </button>
               </div>
             ) : (
               <div className="space-y-4">
-                <p className="text-zinc-400 text-sm">Hubungkan Telegram dengan mengirim kode ini ke bot:</p>
+                {tg.botUsername && <p className="text-zinc-400 text-sm">Bot: <span className="text-blue-400">@{tg.botUsername}</span></p>}
+                <p className="text-zinc-400 text-sm">Hubungkan Telegram dengan mengirim kode ini ke bot kamu:</p>
                 {tg?.linkCode ? (
                   <div className="space-y-3">
                     <div className="bg-zinc-800 rounded-xl p-4 font-mono text-lg text-center tracking-widest text-emerald-400">
                       /start {tg.linkCode}
                     </div>
-                    <p className="text-zinc-500 text-xs">Kirim perintah di atas ke bot Telegram ZeniClaw</p>
+                    <p className="text-zinc-500 text-xs">Kirim perintah di atas ke bot Telegram kamu</p>
                   </div>
                 ) : (
                   <button
@@ -193,6 +246,12 @@ export default function DashboardPage() {
                     Generate Kode Link
                   </button>
                 )}
+                <button
+                  onClick={() => setData(d => d ? { ...d, telegram: { ...d.telegram, botToken: null } } : d)}
+                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors block"
+                >
+                  Ganti bot token
+                </button>
               </div>
             )}
           </div>

@@ -40,12 +40,13 @@ model WhatsAppConnection {
 }
 
 model TelegramConnection {
-  id       String  @id @default(cuid())
-  userId   String  @unique
-  chatId   String?
-  linkCode String? @unique
-  status   String  @default("pending")
-  username String?
+  id        String  @id @default(cuid())
+  userId    String  @unique
+  botToken  String?
+  chatId    String?
+  linkCode  String? @unique
+  status    String  @default("pending")
+  username  String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

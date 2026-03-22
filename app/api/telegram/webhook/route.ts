@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateAIResponse } from "@/app/lib/ai";
 import { prisma } from "@/app/lib/db";
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-
-async function sendTelegramMessage(chatId: string | number, text: string) {
-  if (!BOT_TOKEN) return;
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+async function sendTelegramMessage(botToken: string, chatId: string | number, text: string) {
+  await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chat_id: chatId, text }),
@@ -35,7 +32,7 @@ export async function POST(request: NextRequest) {
           where: { linkCode },
         });
 
-        if (conn && conn.status !== "connected") {
+        if (conn && conn.botToken && conn.status !== "connected") {
           await prisma.telegramConnection.update({
             where: { linkCode },
             data: {
@@ -44,15 +41,21 @@ export async function POST(request: NextRequest) {
               username: username || null,
             },
           });
-          await sendTelegramMessage(chatId, "Telegram kamu berhasil terhubung ke ZeniClaw! Selamat datang. Kamu bisa mulai chat dengan AI Assistant kamu sekarang.");
+          await sendTelegramMessage(conn.botToken, chatId, "Telegram kamu berhasil terhubung ke ZeniClaw! Selamat datang. Kamu bisa mulai chat dengan AI Assistant kamu sekarang.");
           return NextResponse.json({ ok: true });
-        } else if (conn?.status === "connected") {
-          await sendTelegramMessage(chatId, "Akun ini sudah terhubung. Kamu bisa langsung chat!");
+        } else if (conn?.status === "connected" && conn.botToken) {
+          await sendTelegramMessage(conn.botToken, chatId, "Akun ini sudah terhubung. Kamu bisa langsung chat!");
           return NextResponse.json({ ok: true });
         }
       }
 
-      await sendTelegramMessage(chatId, "Halo! Untuk menghubungkan Telegram kamu ke ZeniClaw, buka dashboard dan gunakan kode link yang tersedia.");
+      // No matching linkCode — find by chatId if already connected
+      const existingConn = await prisma.telegramConnection.findFirst({
+        where: { chatId, status: "connected" },
+      });
+      if (existingConn?.botToken) {
+        await sendTelegramMessage(existingConn.botToken, chatId, "Akun ini sudah terhubung. Kamu bisa langsung chat!");
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -61,13 +64,17 @@ export async function POST(request: NextRequest) {
       where: { chatId, status: "connected" },
     });
 
-    if (!conn) {
-      await sendTelegramMessage(chatId, "Akun kamu belum terhubung. Kunjungi zeniclaw.zenova.id untuk mendaftar dan hubungkan Telegram kamu.");
+    if (!conn || !conn.botToken) {
+      // Try to find any conn with this chatId to get the bot token for reply
+      const anyConn = await prisma.telegramConnection.findFirst({ where: { chatId } });
+      if (anyConn?.botToken) {
+        await sendTelegramMessage(anyConn.botToken, chatId, "Akun kamu belum terhubung. Kunjungi zeniclaw.zenova.id untuk mendaftar dan hubungkan Telegram kamu.");
+      }
       return NextResponse.json({ ok: true });
     }
 
     const reply = await generateAIResponse(conn.userId, text, "telegram");
-    await sendTelegramMessage(chatId, reply);
+    await sendTelegramMessage(conn.botToken, chatId, reply);
 
     return NextResponse.json({ ok: true });
   } catch (err) {
