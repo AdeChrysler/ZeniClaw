@@ -45,6 +45,8 @@ export async function GET() {
       status: telegram?.status || "pending",
       username: telegram?.username || null,
       linkCode: telegram?.linkCode || null,
+      botToken: telegram?.botToken ? "configured" : null,
+      botUsername: null,
     },
     stats: {
       messagesToday: todayMessages,
