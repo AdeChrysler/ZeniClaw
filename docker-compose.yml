@@ -2,8 +2,8 @@ services:
   app:
     build: .
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     depends_on:
       db:
         condition: service_healthy
@@ -19,6 +19,9 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-}
       - AUTH_SECRET=${NEXTAUTH_SECRET:-}
+    networks:
+      - coolify
+      - default
 
   db:
     image: postgres:16-alpine
@@ -34,6 +37,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - default
+
+networks:
+  coolify:
+    external: true
+  default:
+    driver: bridge
 
 volumes:
   postgres_data:
