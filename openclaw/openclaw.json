@@ -1,23 +1,12 @@
 {
-  "gateway": {
-    "mode": "local",
-    "bind": "lan"
-  },
   "agents": {
     "defaults": {
       "model": { "primary": "google/gemini-2.5-flash" },
-      "sandbox": "off",
-      "heartbeat": { "every": "1h" }
-    },
-    "systemPrompt": "You are ZeniClaw, an AI Executive Assistant (Chief of Staff) for busy CEOs and professionals.\nYou help with: daily briefings, task management, scheduling, email triage, meeting prep, research, and team coordination.\nYou are proactive, concise, and business-focused. Respond in the user's language (Indonesian or English).\nWhen given a task, confirm it, set a reminder if needed, and follow up.\nYou remember everything across conversations."
+      "sandbox": { "mode": "off" }
+    }
   },
   "channels": {
-    "whatsapp": {
-      "enabled": true,
-      "dmPolicy": "pairing"
-    },
-    "telegram": {
-      "enabled": false
-    }
+    "whatsapp": { "enabled": true },
+    "telegram": { "enabled": false }
   }
 }
