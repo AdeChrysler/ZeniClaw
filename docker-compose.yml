@@ -7,8 +7,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      openclaw:
-        condition: service_healthy
     environment:
       - NODE_ENV=production
       - DATABASE_URL=${DATABASE_URL:-postgresql://zeniclaw:zeniclaw@db:5432/zeniclaw}
@@ -37,32 +35,6 @@ services:
       - coolify
       - default
 
-  openclaw:
-    image: ghcr.io/openclaw/openclaw:latest
-    restart: unless-stopped
-    command: ["openclaw", "gateway", "start"]
-    expose:
-      - "18789"
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      - OPENCLAW_CONFIG_PATH=/openclaw-data/openclaw.json
-      - OPENCLAW_STATE_DIR=/openclaw-data/state
-      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-zeniclaw-gateway-secret}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-    volumes:
-      - ./openclaw:/openclaw-data
-      - openclaw_state:/openclaw-data/state
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:18789/healthz || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    networks:
-      - default
-
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -88,4 +60,3 @@ networks:
 
 volumes:
   postgres_data:
-  openclaw_state:
