@@ -1,12 +1,7 @@
 {
   "agents": {
     "defaults": {
-      "model": { "primary": "google/gemini-2.5-flash" },
-      "sandbox": { "mode": "off" }
+      "model": { "primary": "google/gemini-2.5-flash" }
     }
-  },
-  "channels": {
-    "whatsapp": { "enabled": true },
-    "telegram": { "enabled": false }
   }
 }
