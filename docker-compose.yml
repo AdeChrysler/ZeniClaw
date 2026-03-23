@@ -15,6 +15,12 @@ services:
       # Only mount subdirectories for persistent data — preserves image layer files (plugins, config)
       - openclaw-sessions:/home/node/.openclaw/sessions
       - openclaw-agents:/home/node/.openclaw/agents
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:18789/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
       - default
 
