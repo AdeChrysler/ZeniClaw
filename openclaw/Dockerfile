@@ -2,21 +2,20 @@ FROM ghcr.io/openclaw/openclaw:main
 
 USER root
 
-# Copy openclaw config into the image (not mounted as volume, stays in image layer)
+# Copy openclaw config (gateway settings, model, channels)
 COPY openclaw/openclaw.json /home/node/.openclaw/openclaw.json
 
-# Copy skills into workspace
-RUN mkdir -p /home/node/.openclaw/workspace/skills
-COPY skills/ /home/node/.openclaw/workspace/skills/
+# Copy skills into image's native skills directory
+RUN mkdir -p /app/skills
+COPY skills/ /app/skills/
 
-# Copy init/startup script
-COPY openclaw/start.sh /usr/local/bin/openclaw-start.sh
-RUN chmod +x /usr/local/bin/openclaw-start.sh
-
-RUN chown -R node:node /home/node/.openclaw
+RUN chown -R node:node /home/node/.openclaw /app/skills
 
 USER node
 
 EXPOSE 18789
 
-CMD ["/bin/sh", "/usr/local/bin/openclaw-start.sh"]
+# Use official image mechanism: node openclaw.mjs gateway
+# --bind lan: required for container-to-container networking (default is loopback)
+# --allow-unconfigured: official CMD flag, allows start without prior onboarding
+CMD ["node", "openclaw.mjs", "gateway", "--bind", "lan", "--port", "18789", "--allow-unconfigured"]
