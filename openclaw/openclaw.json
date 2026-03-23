@@ -1,6 +1,11 @@
 {
   "gateway": {
-    "bind": "lan"
+    "mode": "local",
+    "bind": "lan",
+    "port": 18789,
+    "auth": {
+      "mode": "none"
+    }
   },
   "agents": {
     "defaults": {
