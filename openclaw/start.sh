@@ -23,4 +23,4 @@ if [ ! -f "$INIT_DONE" ]; then
 fi
 
 echo "[openclaw-start] Starting OpenClaw gateway on port 18789..."
-exec openclaw gateway --port 18789 --verbose --allow-unconfigured
+exec openclaw gateway --bind lan --port 18789
