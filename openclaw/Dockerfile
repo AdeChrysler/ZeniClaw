@@ -1,4 +1,4 @@
-FROM ghcr.io/openclaw/openclaw:main-slim-amd64
+FROM ghcr.io/openclaw/openclaw:main-amd64
 
 USER root
 
@@ -15,6 +15,6 @@ USER node
 
 EXPOSE 18789
 
-# --bind lan: required for container-to-container networking (default is loopback only)
-# --allow-unconfigured: start gateway without requiring prior interactive onboarding
-CMD ["node", "openclaw.mjs", "gateway", "--bind", "lan", "--port", "18789", "--allow-unconfigured"]
+# gateway.mode=local and gateway.bind=lan are set in openclaw.json config
+# OPENCLAW_GATEWAY_TOKEN env var provides auth token for LAN binding
+CMD ["node", "openclaw.mjs", "gateway", "--port", "18789"]
