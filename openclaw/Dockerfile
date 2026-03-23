@@ -15,6 +15,6 @@ USER node
 
 EXPOSE 18789
 
-# gateway.mode=local and gateway.bind=lan are set in openclaw.json config
-# OPENCLAW_GATEWAY_TOKEN env var provides auth token for LAN binding
-CMD ["node", "openclaw.mjs", "gateway", "--port", "18789"]
+# --bind lan: expose gateway on container LAN (not just loopback), required for inter-container access
+# --allow-unconfigured: allow startup without interactive onboarding wizard
+CMD ["node", "openclaw.mjs", "gateway", "--bind", "lan", "--port", "18789", "--allow-unconfigured"]
