@@ -1,42 +1,43 @@
 #!/bin/sh
-set -e
 
 OPENCLAW_HOME=/home/node/.openclaw
 INIT_DONE="$OPENCLAW_HOME/.initialized"
 
-# Ensure config directories exist
+# Ensure config directories exist (quick)
 mkdir -p "$OPENCLAW_HOME/workspace/skills"
 mkdir -p "$OPENCLAW_HOME/agents"
 
+# Always refresh config and skills from image (quick — these are small files)
+if [ -f "/openclaw-static/openclaw.json" ]; then
+  cp /openclaw-static/openclaw.json "$OPENCLAW_HOME/openclaw.json"
+  echo "[openclaw-start] Config applied."
+fi
+
+if [ -d "/openclaw-static/skills" ]; then
+  cp -r /openclaw-static/skills/. "$OPENCLAW_HOME/workspace/skills/"
+  echo "[openclaw-start] Skills applied."
+fi
+
+# Background initialization on first boot only
+# Plugin installation happens AFTER gateway starts to avoid blocking health check
 if [ ! -f "$INIT_DONE" ]; then
-  echo "[openclaw-start] First run — initializing OpenClaw..."
+  echo "[openclaw-start] First boot detected — plugin init scheduled in background."
+  (
+    # Wait for gateway to be responsive
+    sleep 25
+    echo "[openclaw-init] Installing @openclaw/whatsapp plugin..."
+    openclaw plugins install @openclaw/whatsapp 2>&1 || echo "[openclaw-init] WhatsApp plugin install failed (non-fatal)"
 
-  # Copy openclaw.json config into the persistent volume
-  if [ -f "/openclaw-static/openclaw.json" ]; then
-    cp /openclaw-static/openclaw.json "$OPENCLAW_HOME/openclaw.json"
-    echo "[openclaw-start] Copied openclaw.json to config dir."
-  fi
+    echo "[openclaw-init] Installing @openclaw/telegram plugin..."
+    openclaw plugins install @openclaw/telegram 2>&1 || echo "[openclaw-init] Telegram plugin install failed (non-fatal)"
 
-  # Copy skills into workspace
-  if [ -d "/openclaw-static/skills" ]; then
-    cp -r /openclaw-static/skills/. "$OPENCLAW_HOME/workspace/skills/"
-    echo "[openclaw-start] Copied skills to workspace."
-  fi
+    echo "[openclaw-init] Registering CEO assistant agent..."
+    openclaw agents add ceo-assistant 2>&1 || echo "[openclaw-init] CEO agent add failed (non-fatal)"
 
-  # Install plugins (non-fatal — may already be installed in the image)
-  echo "[openclaw-start] Installing WhatsApp plugin..."
-  openclaw plugins install @openclaw/whatsapp 2>&1 || echo "[openclaw-start] WhatsApp plugin install skipped (may already be installed)"
-
-  echo "[openclaw-start] Installing Telegram plugin..."
-  openclaw plugins install @openclaw/telegram 2>&1 || echo "[openclaw-start] Telegram plugin install skipped (may already be installed)"
-
-  # Add CEO assistant agent
-  echo "[openclaw-start] Adding CEO assistant agent..."
-  openclaw agents add ceo-assistant 2>&1 || echo "[openclaw-start] CEO assistant agent add skipped"
-
-  touch "$INIT_DONE"
-  echo "[openclaw-start] Initialization complete."
+    touch "$INIT_DONE"
+    echo "[openclaw-init] First-boot initialization complete."
+  ) &
 fi
 
 echo "[openclaw-start] Starting OpenClaw gateway on port 18789..."
-exec openclaw gateway --port 18789 --verbose
+exec openclaw gateway --port 18789 --verbose --allow-unconfigured
