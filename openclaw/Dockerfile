@@ -1,4 +1,4 @@
-FROM ghcr.io/openclaw/openclaw:main-amd64
+FROM ghcr.io/openclaw/openclaw:main
 
 USER root
 
