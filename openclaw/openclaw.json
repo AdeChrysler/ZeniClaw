@@ -1,18 +1,6 @@
 {
-  "gateway": {
-    "http": {
-      "port": 18789,
-      "bind": "lan",
-      "endpoints": {
-        "chatCompletions": { "enabled": true },
-        "status": { "enabled": true },
-        "channels": { "enabled": true }
-      }
-    }
-  },
   "agents": {
     "defaults": {
-      "workspace": "~/.openclaw/workspace",
       "model": { "primary": "google/gemini-2.5-flash" },
       "sandbox": "off",
       "heartbeat": { "every": "1h" }
@@ -25,12 +13,7 @@
       "dmPolicy": "pairing"
     },
     "telegram": {
-      "enabled": false,
-      "botToken": "${TELEGRAM_BOT_TOKEN}",
-      "dmPolicy": "pairing"
+      "enabled": false
     }
-  },
-  "session": {
-    "dmScope": "per-channel-peer"
   }
 }

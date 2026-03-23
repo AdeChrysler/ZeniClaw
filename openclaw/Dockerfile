@@ -1,21 +1,20 @@
-FROM ghcr.io/openclaw/openclaw:main
+FROM ghcr.io/openclaw/openclaw:main-slim-amd64
 
 USER root
 
-# Copy openclaw config (gateway settings, model, channels)
+# Copy openclaw config (model provider, channels, agent system prompt)
 COPY openclaw/openclaw.json /home/node/.openclaw/openclaw.json
 
-# Copy skills into image's native skills directory
-RUN mkdir -p /app/skills
-COPY skills/ /app/skills/
+# Copy CEO assistant skill into OpenClaw workspace
+RUN mkdir -p /home/node/.openclaw/workspace/skills/ceo-assistant
+COPY skills/ceo-assistant/SKILL.md /home/node/.openclaw/workspace/skills/ceo-assistant/SKILL.md
 
-RUN chown -R node:node /home/node/.openclaw /app/skills
+RUN chown -R node:node /home/node/.openclaw
 
 USER node
 
 EXPOSE 18789
 
-# Use official image mechanism: node openclaw.mjs gateway
-# --bind lan: required for container-to-container networking (default is loopback)
-# --allow-unconfigured: official CMD flag, allows start without prior onboarding
+# --bind lan: required for container-to-container networking (default is loopback only)
+# --allow-unconfigured: start gateway without requiring prior interactive onboarding
 CMD ["node", "openclaw.mjs", "gateway", "--bind", "lan", "--port", "18789", "--allow-unconfigured"]

@@ -7,6 +7,7 @@ services:
     expose:
       - "18789"
     environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GOOGLE_API_KEY=${GEMINI_API_KEY:-}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
       - OPENCLAW_GATEWAY_BIND=lan
@@ -16,7 +17,7 @@ services:
       - openclaw-sessions:/home/node/.openclaw/sessions
       - openclaw-agents:/home/node/.openclaw/agents
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:18789/api/status || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:18789/healthz || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
