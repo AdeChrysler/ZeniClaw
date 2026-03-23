@@ -1,8 +1,7 @@
 services:
   openclaw:
-    build:
-      context: .
-      dockerfile: openclaw/Dockerfile
+    image: ghcr.io/openclaw/openclaw:main-amd64
+    command: ["node", "openclaw.mjs", "gateway", "--bind", "lan", "--port", "18789", "--allow-unconfigured"]
     restart: unless-stopped
     expose:
       - "18789"
@@ -10,10 +9,12 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GOOGLE_API_KEY=${GEMINI_API_KEY:-}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
-      - OPENCLAW_GATEWAY_BIND=lan
       - TZ=Asia/Jakarta
     volumes:
-      # Only mount subdirectories for persistent data — preserves image layer files (plugins, config)
+      # Mount config file directly — avoids build issues with custom Dockerfile
+      - ./openclaw/openclaw.json:/home/node/.openclaw/openclaw.json:ro
+      - ./skills/ceo-assistant/SKILL.md:/home/node/.openclaw/workspace/skills/ceo-assistant/SKILL.md:ro
+      # Persistent data volumes for sessions and agents
       - openclaw-sessions:/home/node/.openclaw/sessions
       - openclaw-agents:/home/node/.openclaw/agents
     healthcheck:
@@ -21,7 +22,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 90s
     networks:
       - default
 
