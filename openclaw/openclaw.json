@@ -1,0 +1,29 @@
+{
+  gateway: {
+    http: {
+      port: 18789,
+      endpoints: {
+        chatCompletions: { enabled: true }
+      }
+    },
+    auth: {
+      token: "${OPENCLAW_GATEWAY_TOKEN}"
+    }
+  },
+  agents: {
+    defaults: {
+      model: "google/gemini-2.5-flash",
+      sandbox: "off"
+    }
+  },
+  channels: {
+    whatsapp: { enabled: false },
+    telegram: { enabled: false },
+    discord: { enabled: false },
+    slack: { enabled: false },
+    signal: { enabled: false }
+  },
+  session: {
+    dmScope: "peer"
+  }
+}

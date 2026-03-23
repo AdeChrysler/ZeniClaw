@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 const WAHA_URL = process.env.WAHA_URL;
 const WAHA_API_KEY = process.env.WAHA_API_KEY || "666";
+const OPENCLAW_URL = process.env.OPENCLAW_URL || "http://openclaw:18789";
 
 export async function GET() {
   const checks: Record<string, unknown> = {};
@@ -29,6 +30,21 @@ export async function GET() {
     checks.db = { status: "ok" };
   } catch (e) {
     checks.db = { status: "error", error: String(e) };
+  }
+
+  // Check OpenClaw Gateway
+  try {
+    const openclawRes = await fetch(`${OPENCLAW_URL}/healthz`, {
+      signal: AbortSignal.timeout(5000)
+    });
+    if (openclawRes.ok) {
+      const text = await openclawRes.text().catch(() => "");
+      checks.openclaw = { status: "ok", url: OPENCLAW_URL, response: text.slice(0, 100) };
+    } else {
+      checks.openclaw = { status: "error", code: openclawRes.status, url: OPENCLAW_URL };
+    }
+  } catch (e) {
+    checks.openclaw = { status: "unreachable", error: String(e), url: OPENCLAW_URL };
   }
 
   // Telegram - per-user bot tokens (no global token needed)
