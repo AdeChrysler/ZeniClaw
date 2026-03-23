@@ -1,66 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateAIResponse } from "@/app/lib/ai";
+import { prisma } from "@/app/lib/db";
 
-const WAHA_URL = process.env.WAHA_URL;
-const WAHA_API_KEY = process.env.WAHA_API_KEY || "666";
-
+// OpenClaw webhook — receives message events from OpenClaw's WhatsApp channel
+// OpenClaw handles the full AI loop (receive → process → reply via Baileys)
+// This webhook is used for logging messages to our DB for dashboard display.
 export async function POST(request: NextRequest) {
   try {
-    // userId passed as query param when session was created
-    const userId = request.nextUrl.searchParams.get("userId");
-
     const payload = await request.json();
+
+    // OpenClaw webhook format: { event, channel, session, from, message, reply }
     const event = payload?.event;
+    if (!event) return NextResponse.json({ ok: true });
 
-    if (event !== "message") return NextResponse.json({ ok: true });
+    const channel = payload?.channel || "whatsapp";
+    const from = payload?.from || payload?.userId;
+    const userMessage = payload?.message || payload?.text;
+    const aiReply = payload?.reply || payload?.response;
 
-    const message = payload?.payload;
-    if (!message) return NextResponse.json({ ok: true });
+    if (!from || !userMessage) return NextResponse.json({ ok: true });
 
-    const fromMe = message?.fromMe;
-    if (fromMe) return NextResponse.json({ ok: true });
-
-    const text = message?.body;
-    const chatId = message?.from;
-    const sessionName = payload?.session;
-
-    if (!text || !chatId) return NextResponse.json({ ok: true });
-
-    // Resolve userId from sessionName if not in query param
-    let resolvedUserId = userId;
-    if (!resolvedUserId && sessionName) {
-      // session name format: zeniclaw-{userId}
-      resolvedUserId = sessionName.replace("zeniclaw-", "");
-    }
-
-    if (!resolvedUserId) {
-      console.error("No userId found for webhook");
-      return NextResponse.json({ ok: true });
-    }
-
-    const reply = await generateAIResponse(resolvedUserId, text, "whatsapp");
-
-    // Send reply via WAHA
-    await fetch(`${WAHA_URL}/api/sendText`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Api-Key": WAHA_API_KEY,
-      },
-      body: JSON.stringify({
-        session: sessionName,
-        chatId,
-        text: reply,
-      }),
+    // Resolve userId from the 'from' identifier (phone number or session ref)
+    // Try to find a WhatsApp connection by phone number
+    const conn = await prisma.whatsAppConnection.findFirst({
+      where: { phoneNumber: from.replace(/\D/g, "") },
     });
+    const userId = conn?.userId || from;
+
+    // Log messages to DB for dashboard display
+    const records: { userId: string; channel: string; role: string; content: string }[] = [
+      { userId, channel, role: "user", content: userMessage },
+    ];
+    if (aiReply) {
+      records.push({ userId, channel, role: "assistant", content: aiReply });
+    }
+
+    await prisma.message.createMany({ data: records });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("WhatsApp webhook error:", err);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true }); // always 200 to avoid OpenClaw retry storms
   }
-}
-
-export async function GET() {
-  return NextResponse.json({ ok: true, service: "zeniclaw-whatsapp-webhook" });
 }

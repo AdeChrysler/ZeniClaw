@@ -2,42 +2,33 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/db";
 
-const WAHA_URL = process.env.WAHA_URL || "http://waha.sixzenith.com:3003";
-const WAHA_API_KEY = process.env.WAHA_API_KEY || "666";
-const APP_URL = process.env.APP_URL || "https://zeniclaw.zenova.id";
+const OPENCLAW_URL = process.env.OPENCLAW_URL || "http://openclaw:18789";
+const OPENCLAW_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
 
-async function wahaRequest(path: string, method = "GET", body?: object) {
-  const url = `${WAHA_URL}${path}`;
-  console.log(`[WAHA] ${method} ${url}`, body ? JSON.stringify(body) : "");
+function openclawHeaders() {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (OPENCLAW_TOKEN) headers["Authorization"] = `Bearer ${OPENCLAW_TOKEN}`;
+  return headers;
+}
+
+async function openclawRequest(path: string, method = "GET", body?: object) {
+  const url = `${OPENCLAW_URL}${path}`;
   try {
     const res = await fetch(url, {
       method,
-      headers: {
-        "Content-Type": "application/json",
-        "X-Api-Key": WAHA_API_KEY,
-      },
+      headers: openclawHeaders(),
       body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(15000),
     });
     const text = await res.text();
-    console.log(`[WAHA] ${method} ${url} → ${res.status}: ${text.substring(0, 500)}`);
-    return { ok: res.ok, status: res.status, text, json: () => { try { return JSON.parse(text); } catch { return null; } } };
+    const json = () => {
+      try { return JSON.parse(text); } catch { return null; }
+    };
+    return { ok: res.ok, status: res.status, text, json };
   } catch (err) {
-    console.error(`[WAHA] ${method} ${url} FETCH ERROR:`, err);
+    console.error(`[openclaw] ${method} ${url} error:`, err);
     return { ok: false, status: 0, text: String(err), json: () => null };
   }
-}
-
-async function wahaRequestRaw(path: string, method = "GET", body?: object) {
-  const url = `${WAHA_URL}${path}`;
-  const res = await fetch(url, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Api-Key": WAHA_API_KEY,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  return res;
 }
 
 export async function GET(request: NextRequest) {
@@ -45,103 +36,68 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const userId = session.user.id;
-  const sessionName = `zeniclaw-${userId}`;
   const action = request.nextUrl.searchParams.get("action");
 
   try {
     if (action === "qr") {
-      // Wait for session to reach SCAN_QR_CODE state before fetching QR
-      // WAHA sessions start in STARTING state and transition to SCAN_QR_CODE after a few seconds
-      const maxWaitMs = 12000;
-      const pollIntervalMs = 1000;
-      const startTime = Date.now();
-
-      let sessionReady = false;
-      while (Date.now() - startTime < maxWaitMs) {
-        const sessionRes = await wahaRequest(`/api/sessions/${sessionName}`);
-        if (sessionRes.ok) {
-          const sessionData = sessionRes.json();
-          const st = sessionData?.status;
-          console.log(`[WAHA] Session ${sessionName} state: ${st}`);
-          if (st === "SCAN_QR_CODE" || st === "WORKING") {
-            sessionReady = true;
-            break;
-          }
-          if (st === "STOPPED" || st === "FAILED") {
-            // Session is in a terminal bad state — no point waiting
-            break;
-          }
-        } else {
-          // Session doesn't exist yet — wait
-        }
-        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-      }
-
-      if (!sessionReady) {
-        console.error(`[WAHA] QR not ready for ${sessionName} after ${maxWaitMs}ms`);
-        return NextResponse.json({ error: "QR belum siap, silakan tunggu dan coba lagi" }, { status: 503 });
-      }
-
-      // Return QR image as raw bytes — use raw fetch to preserve binary
-      const res = await wahaRequestRaw(`/api/${sessionName}/auth/qr`);
-      if (!res.ok) {
-        const errText = await res.text().catch(() => "unknown");
-        console.error(`[WAHA] QR not available for ${sessionName}: ${res.status} ${errText}`);
-        return NextResponse.json({ error: `QR tidak tersedia: ${res.status} - ${errText}` }, { status: 404 });
-      }
-      const buffer = await res.arrayBuffer();
-      return new NextResponse(buffer, {
-        headers: { "Content-Type": "image/png" },
+      // Request QR code from OpenClaw WhatsApp channel
+      const res = await fetch(`${OPENCLAW_URL}/api/channels/whatsapp/qr`, {
+        headers: openclawHeaders(),
+        signal: AbortSignal.timeout(15000),
       });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        console.error(`[openclaw] QR not available: ${res.status} ${errText}`);
+        return NextResponse.json(
+          { error: `QR belum siap: ${res.status}. Pastikan OpenClaw sudah terhubung.` },
+          { status: 503 }
+        );
+      }
+      // Return QR image as-is
+      const buffer = await res.arrayBuffer();
+      const contentType = res.headers.get("content-type") || "image/png";
+      return new NextResponse(buffer, { headers: { "Content-Type": contentType } });
     }
 
     if (action === "status") {
-      const res = await wahaRequest(`/api/sessions/${sessionName}`);
-      if (!res.ok) {
-        return NextResponse.json({ status: "disconnected", sessionName });
-      }
+      const res = await openclawRequest("/api/channels/whatsapp");
       const data = res.json();
-      const status = data?.status || "disconnected";
+      const channelStatus = data?.status || (res.ok ? "unknown" : "disconnected");
 
-      // Update DB if connected
-      if (status === "WORKING") {
-        const me = await wahaRequest(`/api/sessions/${sessionName}/me`);
-        if (me.ok) {
-          const meData = me.json();
-          await prisma.whatsAppConnection.upsert({
-            where: { userId },
-            create: {
-              userId,
-              sessionName,
-              status: "connected",
-              phoneNumber: meData?.id?.replace("@c.us", "") || null,
-              pushName: meData?.pushName || null,
-              connectedAt: new Date(),
-            },
-            update: {
-              status: "connected",
-              phoneNumber: meData?.id?.replace("@c.us", "") || null,
-              pushName: meData?.pushName || null,
-              connectedAt: new Date(),
-            },
-          });
-        }
+      // Sync to DB for dashboard display
+      if (channelStatus === "connected" || channelStatus === "working") {
+        await prisma.whatsAppConnection.upsert({
+          where: { userId },
+          create: {
+            userId,
+            sessionName: "openclaw",
+            status: "connected",
+            phoneNumber: data?.phone || null,
+            pushName: data?.name || null,
+            connectedAt: new Date(),
+          },
+          update: {
+            status: "connected",
+            phoneNumber: data?.phone || null,
+            pushName: data?.name || null,
+            connectedAt: new Date(),
+          },
+        });
       }
 
-      // Return DB connection info
       const conn = await prisma.whatsAppConnection.findUnique({ where: { userId } });
       return NextResponse.json({
         status: conn?.status || "disconnected",
-        sessionName,
-        phoneNumber: conn?.phoneNumber || null,
-        pushName: conn?.pushName || null,
-        wahaStatus: status,
+        sessionName: "openclaw",
+        phoneNumber: conn?.phoneNumber || data?.phone || null,
+        pushName: conn?.pushName || data?.name || null,
+        openclawStatus: channelStatus,
       });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (err) {
-    console.error("WhatsApp API error:", err);
+    console.error("WhatsApp GET error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -151,88 +107,43 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const userId = session.user.id;
-  const sessionName = `zeniclaw-${userId}`;
   const action = request.nextUrl.searchParams.get("action");
 
   try {
     if (action === "start") {
-      // Reset any stale 'connecting' record for this user before trying to create a new session
-      // This ensures a clean slate so the QR flow starts fresh
-      await prisma.whatsAppConnection.updateMany({
-        where: { userId, status: "connecting" },
-        data: { status: "disconnected" },
+      // Trigger OpenClaw WhatsApp pairing (generates QR)
+      const res = await openclawRequest("/api/channels/whatsapp/pair", "POST", {
+        dmPolicy: "pairing",
       });
 
-      // Check if session already exists first
-      const existingSession = await wahaRequest(`/api/sessions/${sessionName}`);
-      if (existingSession.ok) {
-        const existingData = existingSession.json();
-        const existingStatus = existingData?.status;
-        console.log(`[WAHA] Session ${sessionName} already exists with status: ${existingStatus}`);
-        // If session exists and is working, just update DB
-        if (existingStatus === "WORKING") {
-          await prisma.whatsAppConnection.upsert({
-            where: { userId },
-            create: { userId, sessionName, status: "connected" },
-            update: { status: "connected" },
-          });
-          return NextResponse.json({ ok: true, sessionName, status: "connected" });
-        }
-        // If session is STARTING or SCAN_QR_CODE, just update DB to connecting
-        if (existingStatus === "STARTING" || existingStatus === "SCAN_QR_CODE") {
-          await prisma.whatsAppConnection.upsert({
-            where: { userId },
-            create: { userId, sessionName, status: "connecting" },
-            update: { status: "connecting" },
-          });
-          return NextResponse.json({ ok: true, sessionName, status: "connecting" });
-        }
-        // If session is STOPPED or FAILED, delete and recreate
-        if (existingStatus === "STOPPED" || existingStatus === "FAILED") {
-          console.log(`[WAHA] Deleting stale session ${sessionName}`);
-          await wahaRequest(`/api/sessions/${sessionName}`, "DELETE");
-        }
-      }
-
-      // Create WAHA session for this user
-      const webhookUrl = `${APP_URL}/api/whatsapp/webhook?userId=${userId}`;
-      const createRes = await wahaRequest(`/api/sessions`, "POST", {
-        name: sessionName,
-        start: true,
-        config: {
-          webhooks: [
-            {
-              url: webhookUrl,
-              events: ["message"],
-            },
-          ],
-        },
-      });
-
-      if (!createRes.ok) {
-        const errMsg = createRes.json()?.message || createRes.text || `HTTP ${createRes.status}`;
-        console.error(`[WAHA] Failed to create session ${sessionName}: ${errMsg}`);
+      if (!res.ok) {
+        const errMsg = res.json()?.message || res.text || `HTTP ${res.status}`;
+        console.error(`[openclaw] Pairing failed: ${errMsg}`);
         return NextResponse.json(
-          { error: `Gagal membuat sesi WAHA: ${errMsg}` },
+          { error: `Gagal memulai pairing WhatsApp: ${errMsg}` },
           { status: 502 }
         );
       }
 
       await prisma.whatsAppConnection.upsert({
         where: { userId },
-        create: { userId, sessionName, status: "connecting" },
+        create: { userId, sessionName: "openclaw", status: "connecting" },
         update: { status: "connecting" },
       });
 
-      return NextResponse.json({ ok: true, sessionName });
+      return NextResponse.json({ ok: true, sessionName: "openclaw" });
     }
 
     if (action === "disconnect") {
-      await wahaRequest(`/api/sessions/${sessionName}/stop`, "POST");
-      await wahaRequest(`/api/sessions/${sessionName}`, "DELETE");
+      await openclawRequest("/api/channels/whatsapp/disconnect", "POST");
       await prisma.whatsAppConnection.updateMany({
         where: { userId },
-        data: { status: "disconnected", phoneNumber: null, pushName: null, connectedAt: null },
+        data: {
+          status: "disconnected",
+          phoneNumber: null,
+          pushName: null,
+          connectedAt: null,
+        },
       });
       return NextResponse.json({ ok: true });
     }

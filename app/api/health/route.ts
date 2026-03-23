@@ -1,26 +1,32 @@
 import { NextResponse } from "next/server";
 
-const WAHA_URL = process.env.WAHA_URL;
-const WAHA_API_KEY = process.env.WAHA_API_KEY || "666";
 const OPENCLAW_URL = process.env.OPENCLAW_URL || "http://openclaw:18789";
+const OPENCLAW_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || "";
 
 export async function GET() {
   const checks: Record<string, unknown> = {};
 
-  // Check WAHA
+  // Check real OpenClaw gateway status
   try {
-    const wahaRes = await fetch(`${WAHA_URL}/api/version`, {
-      headers: { "X-Api-Key": WAHA_API_KEY },
-      signal: AbortSignal.timeout(5000)
+    const openclawRes = await fetch(`${OPENCLAW_URL}/api/status`, {
+      headers: OPENCLAW_TOKEN ? { Authorization: `Bearer ${OPENCLAW_TOKEN}` } : {},
+      signal: AbortSignal.timeout(5000),
     });
-    if (wahaRes.ok) {
-      const data = await wahaRes.json();
-      checks.waha = { status: "ok", version: data.version, url: WAHA_URL };
+    if (openclawRes.ok) {
+      const data = await openclawRes.json().catch(() => ({}));
+      checks.openclaw = {
+        status: "ok",
+        url: OPENCLAW_URL,
+        version: data.version || null,
+        model: data.model || null,
+        channels: data.channels || null,
+        uptime: data.uptime || null,
+      };
     } else {
-      checks.waha = { status: "error", code: wahaRes.status, url: WAHA_URL };
+      checks.openclaw = { status: "error", code: openclawRes.status, url: OPENCLAW_URL };
     }
   } catch (e) {
-    checks.waha = { status: "unreachable", error: String(e), url: WAHA_URL };
+    checks.openclaw = { status: "unreachable", error: String(e), url: OPENCLAW_URL };
   }
 
   // Check DB
@@ -32,30 +38,34 @@ export async function GET() {
     checks.db = { status: "error", error: String(e) };
   }
 
-  // Check OpenClaw Gateway
-  try {
-    const openclawRes = await fetch(`${OPENCLAW_URL}/healthz`, {
-      signal: AbortSignal.timeout(5000)
-    });
-    if (openclawRes.ok) {
-      const text = await openclawRes.text().catch(() => "");
-      checks.openclaw = { status: "ok", url: OPENCLAW_URL, response: text.slice(0, 100) };
-    } else {
-      checks.openclaw = { status: "error", code: openclawRes.status, url: OPENCLAW_URL };
-    }
-  } catch (e) {
-    checks.openclaw = { status: "unreachable", error: String(e), url: OPENCLAW_URL };
-  }
-
-  // Telegram - per-user bot tokens (no global token needed)
+  // Telegram — per-user bot tokens
   checks.telegram = {
     status: "per_user",
-    note: "Users provide their own bot token via dashboard"
+    note: "Users provide their own bot token via dashboard",
   };
 
-  return NextResponse.json({ 
-    app: "zeniclaw", 
+  // WhatsApp — managed by OpenClaw Baileys plugin
+  try {
+    const waRes = await fetch(`${OPENCLAW_URL}/api/channels/whatsapp`, {
+      headers: OPENCLAW_TOKEN ? { Authorization: `Bearer ${OPENCLAW_TOKEN}` } : {},
+      signal: AbortSignal.timeout(5000),
+    });
+    if (waRes.ok) {
+      const data = await waRes.json().catch(() => ({}));
+      checks.whatsapp = { status: data.status || "ok", source: "openclaw", data };
+    } else {
+      checks.whatsapp = { status: "unknown", source: "openclaw" };
+    }
+  } catch {
+    checks.whatsapp = { status: "unknown", source: "openclaw" };
+  }
+
+  const overallOk = checks.openclaw && (checks.openclaw as Record<string, unknown>).status === "ok";
+
+  return NextResponse.json({
+    app: "zeniclaw",
     timestamp: new Date().toISOString(),
-    checks 
+    healthy: overallOk,
+    checks,
   });
 }

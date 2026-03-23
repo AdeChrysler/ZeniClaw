@@ -1,4 +1,32 @@
 services:
+  openclaw:
+    build:
+      context: .
+      dockerfile: openclaw/Dockerfile
+    restart: unless-stopped
+    expose:
+      - "18789"
+    environment:
+      - GOOGLE_API_KEY=${GEMINI_API_KEY:-}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
+      - OPENCLAW_GATEWAY_BIND=lan
+      - TZ=Asia/Jakarta
+    volumes:
+      - openclaw-config:/home/node/.openclaw
+      - openclaw-workspace:/home/node/.openclaw/workspace
+      - ./openclaw/openclaw.json:/openclaw-static/openclaw.json:ro
+      - ./skills:/openclaw-static/skills:ro
+      - ./openclaw-start.sh:/openclaw-start.sh:ro
+    entrypoint: ["/bin/sh", "/openclaw-start.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:18789/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - default
+
   app:
     build: .
     restart: unless-stopped
@@ -7,11 +35,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      openclaw:
+        condition: service_healthy
     environment:
       - NODE_ENV=production
       - DATABASE_URL=${DATABASE_URL:-postgresql://zeniclaw:zeniclaw@db:5432/zeniclaw}
-      - WAHA_URL=${WAHA_URL:-http://waha.sixzenith.com:3003}
-      - WAHA_API_KEY=${WAHA_API_KEY:-666}
       - APP_URL=${APP_URL:-https://zeniclaw.zenova.id}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
@@ -19,8 +47,8 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-}
       - AUTH_SECRET=${NEXTAUTH_SECRET:-}
-      - OPENCLAW_URL=${OPENCLAW_URL:-http://localhost:18789}
-      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-zeniclaw-gateway-secret}
+      - OPENCLAW_URL=${OPENCLAW_URL:-http://openclaw:18789}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
     labels:
       - traefik.enable=true
       - traefik.http.routers.zeniclaw.rule=Host(`zeniclaw.zenova.id`)
@@ -60,3 +88,5 @@ networks:
 
 volumes:
   postgres_data:
+  openclaw-config:
+  openclaw-workspace:
