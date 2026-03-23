@@ -12,18 +12,9 @@ services:
       - OPENCLAW_GATEWAY_BIND=lan
       - TZ=Asia/Jakarta
     volumes:
-      - openclaw-config:/home/node/.openclaw
-      - openclaw-workspace:/home/node/.openclaw/workspace
-      - ./openclaw/openclaw.json:/openclaw-static/openclaw.json:ro
-      - ./skills:/openclaw-static/skills:ro
-      - ./openclaw-start.sh:/openclaw-start.sh:ro
-    entrypoint: ["/bin/sh", "/openclaw-start.sh"]
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:18789/healthz || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+      # Only mount subdirectories for persistent data — preserves image layer files (plugins, config)
+      - openclaw-sessions:/home/node/.openclaw/sessions
+      - openclaw-agents:/home/node/.openclaw/agents
     networks:
       - default
 
@@ -86,5 +77,5 @@ networks:
 
 volumes:
   postgres_data:
-  openclaw-config:
-  openclaw-workspace:
+  openclaw-sessions:
+  openclaw-agents:
