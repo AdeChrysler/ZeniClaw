@@ -17,4 +17,4 @@ EXPOSE 18789
 
 # --bind lan: expose gateway on container LAN (not just loopback), required for inter-container access
 # --allow-unconfigured: allow startup without interactive onboarding wizard
-CMD ["node", "openclaw.mjs", "gateway", "--bind", "lan", "--port", "18789", "--allow-unconfigured"]
+CMD ["gateway", "--bind", "lan", "--port", "18789", "--allow-unconfigured"]
