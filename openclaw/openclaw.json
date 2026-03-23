@@ -8,52 +8,29 @@
         "status": { "enabled": true },
         "channels": { "enabled": true }
       }
-    },
-    "auth": {
-      "note": "Token is read from OPENCLAW_GATEWAY_TOKEN env var at runtime"
-    }
-  },
-  "providers": {
-    "google": {
-      "apiKey": "${GOOGLE_API_KEY}",
-      "models": ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]
     }
   },
   "agents": {
     "defaults": {
-      "model": "google/gemini-2.5-flash",
-      "maxTokens": 1000,
-      "temperature": 0.7,
+      "workspace": "~/.openclaw/workspace",
+      "model": { "primary": "google/gemini-2.5-flash" },
       "sandbox": "off",
-      "memory": true,
-      "heartbeat": true
+      "heartbeat": { "every": "1h" }
     },
     "systemPrompt": "You are ZeniClaw, an AI Executive Assistant (Chief of Staff) for busy CEOs and professionals.\nYou help with: daily briefings, task management, scheduling, email triage, meeting prep, research, and team coordination.\nYou are proactive, concise, and business-focused. Respond in the user's language (Indonesian or English).\nWhen given a task, confirm it, set a reminder if needed, and follow up.\nYou remember everything across conversations."
   },
   "channels": {
     "whatsapp": {
       "enabled": true,
-      "dmPolicy": "pairing",
-      "plugin": "@openclaw/whatsapp"
+      "dmPolicy": "pairing"
     },
     "telegram": {
-      "enabled": true,
-      "plugin": "@openclaw/telegram"
-    },
-    "discord": { "enabled": false },
-    "slack": { "enabled": false },
-    "signal": { "enabled": false }
-  },
-  "memory": {
-    "enabled": true,
-    "backend": "markdown",
-    "path": "~/.openclaw/agents"
-  },
-  "heartbeat": {
-    "enabled": true,
-    "interval": "1h"
+      "enabled": false,
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "dmPolicy": "pairing"
+    }
   },
   "session": {
-    "dmScope": "peer"
+    "dmScope": "per-channel-peer"
   }
 }
