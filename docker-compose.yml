@@ -7,8 +7,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      openclaw:
-        condition: service_healthy
     environment:
       - NODE_ENV=production
       - DATABASE_URL=${DATABASE_URL:-postgresql://zeniclaw:zeniclaw@db:5432/zeniclaw}
@@ -21,7 +19,7 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-}
       - AUTH_SECRET=${NEXTAUTH_SECRET:-}
-      - OPENCLAW_URL=${OPENCLAW_URL:-http://openclaw:18789}
+      - OPENCLAW_URL=${OPENCLAW_URL:-http://localhost:18789}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-zeniclaw-gateway-secret}
     labels:
       - traefik.enable=true
@@ -35,24 +33,6 @@ services:
       - traefik.http.routers.zeniclaw-http.middlewares=redirect-to-https
     networks:
       - coolify
-      - default
-
-  openclaw:
-    build: ./openclaw
-    restart: unless-stopped
-    expose:
-      - "18789"
-    environment:
-      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-zeniclaw-gateway-secret}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - OPENCLAW_MODEL=gemini-2.5-flash
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:18789/healthz || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
       - default
 
   db:
