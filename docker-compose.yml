@@ -35,8 +35,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      openclaw:
-        condition: service_healthy
     environment:
       - NODE_ENV=production
       - DATABASE_URL=${DATABASE_URL:-postgresql://zeniclaw:zeniclaw@db:5432/zeniclaw}
