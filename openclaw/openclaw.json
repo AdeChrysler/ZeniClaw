@@ -1,29 +1,29 @@
 {
-  gateway: {
-    http: {
-      port: 18789,
-      endpoints: {
-        chatCompletions: { enabled: true }
+  "gateway": {
+    "http": {
+      "port": 18789,
+      "endpoints": {
+        "chatCompletions": { "enabled": true }
       }
     },
-    auth: {
-      token: "${OPENCLAW_GATEWAY_TOKEN}"
+    "auth": {
+      "note": "Token is read from OPENCLAW_GATEWAY_TOKEN env var at runtime"
     }
   },
-  agents: {
-    defaults: {
-      model: "google/gemini-2.5-flash",
-      sandbox: "off"
+  "agents": {
+    "defaults": {
+      "model": "google/gemini-2.5-flash",
+      "sandbox": "off"
     }
   },
-  channels: {
-    whatsapp: { enabled: false },
-    telegram: { enabled: false },
-    discord: { enabled: false },
-    slack: { enabled: false },
-    signal: { enabled: false }
+  "channels": {
+    "whatsapp": { "enabled": false },
+    "telegram": { "enabled": false },
+    "discord": { "enabled": false },
+    "slack": { "enabled": false },
+    "signal": { "enabled": false }
   },
-  session: {
-    dmScope: "peer"
+  "session": {
+    "dmScope": "peer"
   }
 }
