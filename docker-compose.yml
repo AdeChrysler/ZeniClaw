@@ -16,11 +16,11 @@ services:
       - openclaw-sessions:/home/node/.openclaw/sessions
       - openclaw-agents:/home/node/.openclaw/agents
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:18789/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:18789/api/status || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 90s
     networks:
       - default
 
