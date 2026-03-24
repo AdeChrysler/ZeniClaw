@@ -8,7 +8,7 @@ export async function GET() {
   // Check real OpenClaw gateway via /healthz
   try {
     const openclawRes = await fetch(`${OPENCLAW_URL}/healthz`, {
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(5000),
     });
     if (openclawRes.ok) {
       const text = await openclawRes.text().catch(() => "");
