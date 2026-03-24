@@ -16,6 +16,12 @@ if [ -f "/app/.openclaw-config/openclaw.json" ]; then
   echo "[openclaw-start] Config applied."
 fi
 
+# Copy baked skills into workspace (volume mounts agents/ and sessions/ only, not skills)
+if [ -d "/app/skills" ]; then
+  cp -r /app/skills/. "$HOME/.openclaw/workspace/skills/"
+  echo "[openclaw-start] Skills applied: $(ls /app/skills)"
+fi
+
 echo "[openclaw-start] Starting OpenClaw gateway on 127.0.0.1:18788..."
 node /app/openclaw.mjs gateway --port 18788 --allow-unconfigured &
 OPENCLAW_PID=$!

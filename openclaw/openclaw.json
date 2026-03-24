@@ -10,5 +10,18 @@
     "defaults": {
       "model": { "primary": "google/gemini-2.5-flash" }
     }
+  },
+  "tools": {
+    "allow": ["group:web", "group:memory"],
+    "web": {
+      "fetch": {
+        "enabled": true,
+        "maxChars": 50000,
+        "timeoutSeconds": 30
+      },
+      "search": {
+        "enabled": true
+      }
+    }
   }
 }
