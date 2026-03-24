@@ -29,8 +29,16 @@ services:
     restart: unless-stopped
     expose:
       - "3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     depends_on:
       db:
+        condition: service_healthy
+      openclaw:
         condition: service_healthy
     environment:
       - NODE_ENV=production
@@ -51,6 +59,9 @@ services:
       - traefik.http.routers.zeniclaw.tls=true
       - traefik.http.routers.zeniclaw.tls.certresolver=letsencrypt
       - traefik.http.services.zeniclaw.loadbalancer.server.port=3000
+      - traefik.http.services.zeniclaw.loadbalancer.healthcheck.path=/api/health
+      - traefik.http.services.zeniclaw.loadbalancer.healthcheck.interval=30s
+      - traefik.http.services.zeniclaw.loadbalancer.healthcheck.timeout=10s
       - traefik.http.routers.zeniclaw-http.rule=Host(`zeniclaw.zenova.id`)
       - traefik.http.routers.zeniclaw-http.entrypoints=http
       - traefik.http.routers.zeniclaw-http.middlewares=redirect-to-https

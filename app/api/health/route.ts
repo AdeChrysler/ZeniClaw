@@ -44,10 +44,13 @@ export async function GET() {
 
   const overallOk = checks.openclaw && (checks.openclaw as Record<string, unknown>).status === "ok";
 
-  return NextResponse.json({
-    app: "zeniclaw",
-    timestamp: new Date().toISOString(),
-    healthy: overallOk,
-    checks,
-  });
+  return NextResponse.json(
+    {
+      app: "zeniclaw",
+      timestamp: new Date().toISOString(),
+      healthy: overallOk,
+      checks,
+    },
+    { status: overallOk ? 200 : 503 }
+  );
 }
