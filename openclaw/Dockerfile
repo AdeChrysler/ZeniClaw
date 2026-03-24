@@ -2,19 +2,15 @@ FROM ghcr.io/openclaw/openclaw:main
 
 USER root
 
-# Copy openclaw config (model provider, channels, agent system prompt)
-COPY openclaw/openclaw.json /home/node/.openclaw/openclaw.json
-
-# Copy CEO assistant skill into OpenClaw workspace
-RUN mkdir -p /home/node/.openclaw/workspace/skills/ceo-assistant
-COPY skills/ceo-assistant/SKILL.md /home/node/.openclaw/workspace/skills/ceo-assistant/SKILL.md
-
-RUN chown -R node:node /home/node/.openclaw
+# Copy CEO assistant skill into OpenClaw workspace (at /app/skills where OpenClaw looks)
+RUN mkdir -p /app/skills/ceo-assistant
+COPY skills/ceo-assistant/SKILL.md /app/skills/ceo-assistant/SKILL.md
 
 USER node
 
 EXPOSE 18789
 
-# --bind lan: expose gateway on container LAN (not just loopback), required for inter-container access
-# --allow-unconfigured: allow startup without interactive onboarding wizard
+# Use the same CMD as the base image but add --bind lan for inter-container access
+# --bind lan: expose on Docker bridge network (0.0.0.0), required for other containers to reach us
+# --allow-unconfigured: allow startup without interactive wizard
 CMD ["node", "/app/openclaw.mjs", "gateway", "--bind", "lan", "--port", "18789", "--allow-unconfigured"]
