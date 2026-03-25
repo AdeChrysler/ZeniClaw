@@ -4,6 +4,9 @@
 # Problem: 'openclaw gateway --bind lan' crashes in Coolify's Docker environment.
 # Solution: Run gateway on loopback:18788 (stable), forward 0.0.0.0:18789 via socat.
 # This makes openclaw:18789 reachable from other containers without --bind lan.
+#
+# Supervisor: If openclaw crashes, this script restarts it automatically instead
+# of exiting. This keeps the container alive and avoids the full 150s restart cycle.
 
 echo "[openclaw-start] HOME=$HOME"
 
@@ -22,9 +25,20 @@ if [ -d "/app/skills" ]; then
   echo "[openclaw-start] Skills applied: $(ls /app/skills)"
 fi
 
-echo "[openclaw-start] Starting OpenClaw gateway on 127.0.0.1:18788..."
-node /app/openclaw.mjs gateway --port 18788 --allow-unconfigured &
-OPENCLAW_PID=$!
+start_openclaw() {
+  echo "[openclaw-start] Starting OpenClaw gateway on 127.0.0.1:18788..."
+  node /app/openclaw.mjs gateway --port 18788 --allow-unconfigured &
+  echo $!
+}
+
+start_socat() {
+  echo "[openclaw-start] Starting socat: 0.0.0.0:18789 -> 127.0.0.1:18788"
+  socat TCP4-LISTEN:18789,bind=0.0.0.0,fork,reuseaddr TCP4:127.0.0.1:18788 &
+  echo $!
+}
+
+# Initial openclaw start
+OPENCLAW_PID=$(start_openclaw)
 
 echo "[openclaw-start] Waiting for gateway to become ready (up to 90s)..."
 READY=0
@@ -35,7 +49,7 @@ for i in $(seq 1 45); do
     break
   fi
   if ! kill -0 $OPENCLAW_PID 2>/dev/null; then
-    echo "[openclaw-start] ERROR: OpenClaw process exited unexpectedly"
+    echo "[openclaw-start] ERROR: OpenClaw process exited during startup"
     exit 1
   fi
   sleep 2
@@ -46,15 +60,25 @@ if [ "$READY" = "0" ]; then
   exit 1
 fi
 
-echo "[openclaw-start] Starting socat: 0.0.0.0:18789 -> 127.0.0.1:18788"
-socat TCP4-LISTEN:18789,bind=0.0.0.0,fork,reuseaddr TCP4:127.0.0.1:18788 &
-SOCAT_PID=$!
+SOCAT_PID=$(start_socat)
 echo "[openclaw-start] Socat forwarder running (PID=$SOCAT_PID)"
 echo "[openclaw-start] OpenClaw gateway accessible at :18789"
 
-# Wait for OpenClaw; if it exits, clean up
-wait $OPENCLAW_PID
-EXIT_CODE=$?
-echo "[openclaw-start] OpenClaw exited with code $EXIT_CODE"
-kill $SOCAT_PID 2>/dev/null
-exit $EXIT_CODE
+# Supervisor loop: keep openclaw and socat alive indefinitely.
+# If openclaw crashes, restart it. Container stays up throughout.
+while true; do
+  if ! kill -0 $OPENCLAW_PID 2>/dev/null; then
+    echo "[openclaw-start] OpenClaw crashed, restarting in 5s..."
+    sleep 5
+    OPENCLAW_PID=$(start_openclaw)
+    echo "[openclaw-start] OpenClaw restarted (PID=$OPENCLAW_PID)"
+  fi
+
+  if ! kill -0 $SOCAT_PID 2>/dev/null; then
+    echo "[openclaw-start] socat died, restarting..."
+    SOCAT_PID=$(start_socat)
+    echo "[openclaw-start] socat restarted (PID=$SOCAT_PID)"
+  fi
+
+  sleep 5
+done

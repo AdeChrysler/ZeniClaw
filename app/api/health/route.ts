@@ -42,13 +42,19 @@ export async function GET() {
   // WhatsApp — managed by OpenClaw (status tracked via DB)
   checks.whatsapp = { status: "managed_by_openclaw", source: "openclaw" };
 
-  const overallOk = checks.openclaw && (checks.openclaw as Record<string, unknown>).status === "ok";
+  // App health is based on DB + process, not openclaw.
+  // Openclaw down = degraded (WhatsApp features unavailable), not a full outage.
+  // Returning 503 when openclaw is down causes Traefik to drop ALL traffic.
+  const dbOk = checks.db && (checks.db as Record<string, unknown>).status === "ok";
+  const openclawOk = checks.openclaw && (checks.openclaw as Record<string, unknown>).status === "ok";
+  const overallOk = dbOk;
 
   return NextResponse.json(
     {
       app: "zeniclaw",
       timestamp: new Date().toISOString(),
       healthy: overallOk,
+      degraded: !openclawOk,
       checks,
     },
     { status: overallOk ? 200 : 503 }
