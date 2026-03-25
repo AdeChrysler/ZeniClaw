@@ -5,33 +5,35 @@ const OPENCLAW_URL = process.env.OPENCLAW_URL || "http://openclaw:18789";
 export async function GET() {
   const checks: Record<string, unknown> = {};
 
-  // Check real OpenClaw gateway via /healthz
-  try {
-    const openclawRes = await fetch(`${OPENCLAW_URL}/healthz`, {
-      signal: AbortSignal.timeout(5000),
-    });
-    if (openclawRes.ok) {
-      const text = await openclawRes.text().catch(() => "");
-      checks.openclaw = {
-        status: "ok",
-        url: OPENCLAW_URL,
-        response: text.slice(0, 100),
-      };
-    } else {
-      checks.openclaw = { status: "error", code: openclawRes.status, url: OPENCLAW_URL };
-    }
-  } catch (e) {
-    checks.openclaw = { status: "unreachable", error: String(e), url: OPENCLAW_URL };
-  }
+  // Run openclaw and DB checks in parallel with short timeouts so this
+  // endpoint always responds in <3s (well within Traefik's 10s health check timeout).
+  const [openclawResult, dbResult] = await Promise.allSettled([
+    // OpenClaw check — 2s timeout to leave margin for DB + response overhead
+    (async () => {
+      const res = await fetch(`${OPENCLAW_URL}/healthz`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      if (!res.ok) return { status: "error", code: res.status, url: OPENCLAW_URL };
+      const text = await res.text().catch(() => "");
+      return { status: "ok", url: OPENCLAW_URL, response: text.slice(0, 100) };
+    })(),
+    // DB check
+    (async () => {
+      const { prisma } = await import("@/app/lib/db");
+      await prisma.$queryRaw`SELECT 1`;
+      return { status: "ok" };
+    })(),
+  ]);
 
-  // Check DB
-  try {
-    const { prisma } = await import("@/app/lib/db");
-    await prisma.$queryRaw`SELECT 1`;
-    checks.db = { status: "ok" };
-  } catch (e) {
-    checks.db = { status: "error", error: String(e) };
-  }
+  checks.openclaw =
+    openclawResult.status === "fulfilled"
+      ? openclawResult.value
+      : { status: "unreachable", error: String((openclawResult as PromiseRejectedResult).reason), url: OPENCLAW_URL };
+
+  checks.db =
+    dbResult.status === "fulfilled"
+      ? dbResult.value
+      : { status: "error", error: String((dbResult as PromiseRejectedResult).reason) };
 
   // Telegram — per-user bot tokens
   checks.telegram = {
