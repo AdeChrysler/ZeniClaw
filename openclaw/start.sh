@@ -5,8 +5,9 @@
 # Solution: Run gateway on loopback:18788 (stable), forward 0.0.0.0:18789 via socat.
 # This makes openclaw:18789 reachable from other containers without --bind lan.
 #
-# Supervisor: If openclaw crashes, this script restarts it automatically instead
-# of exiting. This keeps the container alive and avoids the full 150s restart cycle.
+# Supervisor: Never exits. If openclaw crashes, it is restarted automatically.
+# socat is kept alive so port 18789 is always bound (connections fail gracefully
+# while openclaw is recovering, rather than the container being restarted).
 
 echo "[openclaw-start] HOME=$HOME"
 
@@ -25,21 +26,19 @@ if [ -d "/app/skills" ]; then
   echo "[openclaw-start] Skills applied: $(ls /app/skills)"
 fi
 
-start_openclaw() {
-  echo "[openclaw-start] Starting OpenClaw gateway on 127.0.0.1:18788..."
-  node /app/openclaw.mjs gateway --port 18788 --allow-unconfigured &
-  echo $!
-}
+# Start socat immediately so port 18789 is always bound.
+# Connections will fail gracefully while openclaw is starting/recovering.
+echo "[openclaw-start] Starting socat: 0.0.0.0:18789 -> 127.0.0.1:18788"
+socat TCP4-LISTEN:18789,bind=0.0.0.0,fork,reuseaddr TCP4:127.0.0.1:18788 &
+SOCAT_PID=$!
+echo "[openclaw-start] socat running (PID=$SOCAT_PID)"
 
-start_socat() {
-  echo "[openclaw-start] Starting socat: 0.0.0.0:18789 -> 127.0.0.1:18788"
-  socat TCP4-LISTEN:18789,bind=0.0.0.0,fork,reuseaddr TCP4:127.0.0.1:18788 &
-  echo $!
-}
+# Start openclaw
+echo "[openclaw-start] Starting OpenClaw gateway on 127.0.0.1:18788..."
+node /app/openclaw.mjs gateway --port 18788 --allow-unconfigured &
+OPENCLAW_PID=$!
 
-# Initial openclaw start
-OPENCLAW_PID=$(start_openclaw)
-
+# Wait for initial readiness (log only — do NOT exit on failure)
 echo "[openclaw-start] Waiting for gateway to become ready (up to 90s)..."
 READY=0
 for i in $(seq 1 45); do
@@ -49,34 +48,34 @@ for i in $(seq 1 45); do
     break
   fi
   if ! kill -0 $OPENCLAW_PID 2>/dev/null; then
-    echo "[openclaw-start] ERROR: OpenClaw process exited during startup"
-    exit 1
+    echo "[openclaw-start] WARN: OpenClaw process exited during startup — will retry via supervisor"
+    break
   fi
   sleep 2
 done
 
 if [ "$READY" = "0" ]; then
-  echo "[openclaw-start] ERROR: Gateway did not become ready in 90s"
-  exit 1
+  echo "[openclaw-start] WARN: Gateway not ready in 90s — supervisor will keep retrying"
 fi
 
-SOCAT_PID=$(start_socat)
-echo "[openclaw-start] Socat forwarder running (PID=$SOCAT_PID)"
-echo "[openclaw-start] OpenClaw gateway accessible at :18789"
+echo "[openclaw-start] Entering supervisor loop..."
 
 # Supervisor loop: keep openclaw and socat alive indefinitely.
-# If openclaw crashes, restart it. Container stays up throughout.
+# Container never exits — Docker restart policy is last resort only.
 while true; do
   if ! kill -0 $OPENCLAW_PID 2>/dev/null; then
-    echo "[openclaw-start] OpenClaw crashed, restarting in 5s..."
+    echo "[openclaw-start] OpenClaw is not running, starting in 5s..."
     sleep 5
-    OPENCLAW_PID=$(start_openclaw)
-    echo "[openclaw-start] OpenClaw restarted (PID=$OPENCLAW_PID)"
+    echo "[openclaw-start] Starting OpenClaw gateway on 127.0.0.1:18788..."
+    node /app/openclaw.mjs gateway --port 18788 --allow-unconfigured &
+    OPENCLAW_PID=$!
+    echo "[openclaw-start] OpenClaw started (PID=$OPENCLAW_PID)"
   fi
 
   if ! kill -0 $SOCAT_PID 2>/dev/null; then
     echo "[openclaw-start] socat died, restarting..."
-    SOCAT_PID=$(start_socat)
+    socat TCP4-LISTEN:18789,bind=0.0.0.0,fork,reuseaddr TCP4:127.0.0.1:18788 &
+    SOCAT_PID=$!
     echo "[openclaw-start] socat restarted (PID=$SOCAT_PID)"
   fi
 
