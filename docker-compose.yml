@@ -39,7 +39,7 @@ services:
       db:
         condition: service_healthy
       openclaw:
-        condition: service_healthy
+        condition: service_started
     environment:
       - NODE_ENV=production
       - DATABASE_URL=${DATABASE_URL:-postgresql://zeniclaw:zeniclaw@db:5432/zeniclaw}
