@@ -1,4 +1,16 @@
 services:
+  autoheal:
+    image: willfarrell/autoheal:latest
+    restart: always
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - AUTOHEAL_INTERVAL=10
+      - AUTOHEAL_START_PERIOD=0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - default
+
   openclaw:
     build:
       context: .
@@ -21,6 +33,12 @@ services:
       timeout: 10s
       retries: 5
       start_period: 150s
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    labels:
+      - autoheal=true
     networks:
       - default
 
@@ -53,6 +71,7 @@ services:
       - OPENCLAW_URL=${OPENCLAW_URL:-http://openclaw:18789}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
     labels:
+      - autoheal=true
       - traefik.enable=true
       - traefik.http.routers.zeniclaw.rule=Host(`zeniclaw.zenova.id`)
       - traefik.http.routers.zeniclaw.entrypoints=https
