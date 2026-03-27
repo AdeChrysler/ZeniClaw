@@ -17,12 +17,17 @@ export async function GET() {
       const text = await res.text().catch(() => "");
       return { status: "ok", url: OPENCLAW_URL, response: text.slice(0, 100) };
     })(),
-    // DB check
-    (async () => {
-      const { prisma } = await import("@/app/lib/db");
-      await prisma.$queryRaw`SELECT 1`;
-      return { status: "ok" };
-    })(),
+    // DB check — 5s hard timeout so a stalled Prisma pool never blocks this endpoint
+    Promise.race([
+      (async () => {
+        const { prisma } = await import("@/app/lib/db");
+        await prisma.$queryRaw`SELECT 1`;
+        return { status: "ok" };
+      })(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("DB health check timed out after 5s")), 5000)
+      ),
+    ]),
   ]);
 
   checks.openclaw =
