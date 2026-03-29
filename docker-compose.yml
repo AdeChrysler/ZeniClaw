@@ -86,6 +86,10 @@ services:
       - traefik.http.routers.zeniclaw.tls=true
       - traefik.http.routers.zeniclaw.tls.certresolver=letsencrypt
       - traefik.http.services.zeniclaw.loadbalancer.server.port=3000
+      # HTTP router: required for Cloudflare Flexible SSL mode (CF connects to origin via HTTP)
+      - traefik.http.routers.zeniclaw-http.rule=Host(`zeniclaw.zenova.id`)
+      - traefik.http.routers.zeniclaw-http.entrypoints=http
+      - traefik.http.routers.zeniclaw-http.service=zeniclaw
     networks:
       - coolify
       - default
