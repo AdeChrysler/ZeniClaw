@@ -24,9 +24,10 @@ services:
       - GOOGLE_API_KEY=${GEMINI_API_KEY:-}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
       - TZ=Asia/Jakarta
-      # Limit V8 heap to 820MB — openclaw gateway OOMs without this.
-      # Container limit is 1024MB; this prevents crash loops every ~10s.
-      - NODE_OPTIONS=--max-old-space-size=820
+      # Root cause of recurring OOM: openclaw gateway requires ~800MB of live heap on startup.
+      # With 820MB cap there is zero GC headroom — crash loops every 15-17s.
+      # Fix: 2048M container + 1700M heap gives 900MB of GC headroom above the 800MB live set.
+      - NODE_OPTIONS=--max-old-space-size=1700
     volumes:
       - openclaw-sessions:/home/node/.openclaw/sessions
       - openclaw-agents:/home/node/.openclaw/agents
@@ -39,7 +40,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1024M
+          memory: 2048M
     labels:
       - autoheal=true
     networks:
