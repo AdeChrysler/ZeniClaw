@@ -24,6 +24,9 @@ services:
       - GOOGLE_API_KEY=${GEMINI_API_KEY:-}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
       - TZ=Asia/Jakarta
+      # Limit V8 heap to 820MB — openclaw gateway OOMs without this.
+      # Container limit is 1024MB; this prevents crash loops every ~10s.
+      - NODE_OPTIONS=--max-old-space-size=820
     volumes:
       - openclaw-sessions:/home/node/.openclaw/sessions
       - openclaw-agents:/home/node/.openclaw/agents
@@ -75,8 +78,6 @@ services:
       - OPENCLAW_URL=${OPENCLAW_URL:-http://openclaw:18789}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
       # Limit V8 heap to 820MB — prevents OOM kill (container limit: 1024MB).
-      # Without this, Node.js can grow beyond the container limit and be killed
-      # by the OOM killer with no warning, causing container crashes.
       - NODE_OPTIONS=--max-old-space-size=820
     labels:
       - traefik.enable=true
@@ -85,9 +86,6 @@ services:
       - traefik.http.routers.zeniclaw.tls=true
       - traefik.http.routers.zeniclaw.tls.certresolver=letsencrypt
       - traefik.http.services.zeniclaw.loadbalancer.server.port=3000
-      - traefik.http.routers.zeniclaw-http.rule=Host(`zeniclaw.zenova.id`)
-      - traefik.http.routers.zeniclaw-http.entrypoints=http
-      - traefik.http.routers.zeniclaw-http.middlewares=redirect-to-https
     networks:
       - coolify
       - default
