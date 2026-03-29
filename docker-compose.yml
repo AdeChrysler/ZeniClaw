@@ -85,9 +85,6 @@ services:
       - traefik.http.routers.zeniclaw.tls=true
       - traefik.http.routers.zeniclaw.tls.certresolver=letsencrypt
       - traefik.http.services.zeniclaw.loadbalancer.server.port=3000
-      - traefik.http.services.zeniclaw.loadbalancer.healthcheck.path=/api/ping
-      - traefik.http.services.zeniclaw.loadbalancer.healthcheck.interval=30s
-      - traefik.http.services.zeniclaw.loadbalancer.healthcheck.timeout=5s
       - traefik.http.routers.zeniclaw-http.rule=Host(`zeniclaw.zenova.id`)
       - traefik.http.routers.zeniclaw-http.entrypoints=http
       - traefik.http.routers.zeniclaw-http.middlewares=redirect-to-https
