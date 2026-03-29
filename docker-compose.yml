@@ -49,10 +49,10 @@ services:
       - "3000"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/ping').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 20s
+      interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 120s
     deploy:
       resources:
         limits:
@@ -74,8 +74,11 @@ services:
       - AUTH_SECRET=${NEXTAUTH_SECRET:-}
       - OPENCLAW_URL=${OPENCLAW_URL:-http://openclaw:18789}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
+      # Limit V8 heap to 820MB — prevents OOM kill (container limit: 1024MB).
+      # Without this, Node.js can grow beyond the container limit and be killed
+      # by the OOM killer with no warning, causing container crashes.
+      - NODE_OPTIONS=--max-old-space-size=820
     labels:
-      - autoheal=true
       - traefik.enable=true
       - traefik.http.routers.zeniclaw.rule=Host(`zeniclaw.zenova.id`)
       - traefik.http.routers.zeniclaw.entrypoints=https
